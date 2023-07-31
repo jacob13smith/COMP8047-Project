@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:convert';
 
 void main() {
   runApp(const MyApp());
@@ -42,7 +43,8 @@ class _MyHomePageState extends State<MyHomePage> {
           List<int> data = socket.read() as List<int>;
           if (data != null) {
             String message = String.fromCharCodes(data);
-            print('Received data: $message');
+            var json = jsonDecode(message);
+            print('Received data: $json');
           }
         } else if (event == RawSocketEvent.write) {
           // The socket is ready for writing
