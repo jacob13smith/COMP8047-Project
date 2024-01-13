@@ -1,43 +1,54 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
 class SocketApi {
-  late String readSocketPath;
-  late String writeSocketPath;
-  late RawSocket writeSocket;
-  late RawSocket readSocket;
+  late String socketPath;
+  late Socket socket;
+  final Map<int, Completer<dynamic>> _responseCompleters = {};
 
-  SocketApi(this.readSocketPath, this.writeSocketPath);
+  SocketApi(this.socketPath);
 
   // Connect to the Unix socket
   Future<void> connect() async {
-    InternetAddress? hostWrite =
-        InternetAddress(writeSocketPath, type: InternetAddressType.unix);
-    InternetAddress? hostRead =
-        InternetAddress(readSocketPath, type: InternetAddressType.unix);
+    InternetAddress? host =
+        InternetAddress(socketPath, type: InternetAddressType.unix);
 
-    writeSocket = await RawSocket.connect(hostWrite, 0);
-    readSocket = await RawSocket.connect(hostRead, 0);
+    socket = await Socket.connect(host, 0);
+
+    _startListening();
   }
 
-  void readFromSocket(RawSocket socket) {
-    // Data is available to read
-    List<int> data = readSocket.read() as List<int>;
-    if (data.isNotEmpty) {
-      String message = String.fromCharCodes(data);
-      var json = jsonDecode(message);
-      print('Received data: $json');
+  void _startListening() {
+    socket.listen((List<int> data) {
+      String response = String.fromCharCodes(data);
+      _handleResponse(response);
+    });
+  }
+
+  void _handleResponse(String response) {
+    final responseJson = jsonDecode(response);
+    int requestId = responseJson['id'];
+    String responseData = responseJson['data'];
+
+    if (_responseCompleters.containsKey(requestId)) {
+      _responseCompleters[requestId]!.complete(jsonDecode(responseData));
+      _responseCompleters.remove(requestId);
     }
   }
 
   // Send a message to the Rust daemon
-  void sendMessage(String message) {
-    writeSocket.write(utf8.encode(message));
+  Future<dynamic> sendRequest(Map request) {
+    int requestId = DateTime.now().millisecondsSinceEpoch;
+    request['id'] = requestId;
+    Completer<dynamic> completer = Completer<dynamic>();
+    _responseCompleters[requestId] = completer;
+    socket.write(jsonEncode(request));
+    return completer.future;
   }
 
   // Close the socket connection
   void close() {
-    writeSocket.close();
-    readSocket.close();
+    socket.close();
   }
 }
