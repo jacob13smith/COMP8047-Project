@@ -1,13 +1,10 @@
-import 'dart:typed_data';
 
 import 'socket_api.dart';
 
 import 'package:flutter/material.dart';
-import 'dart:io';
-import 'dart:convert';
 
 void main() {
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
