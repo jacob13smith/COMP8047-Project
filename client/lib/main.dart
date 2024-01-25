@@ -1,4 +1,3 @@
-
 import 'socket_api.dart';
 
 import 'package:flutter/material.dart';
@@ -35,6 +34,12 @@ class _WelcomePageState extends State<WelcomePage> {
   late SocketApi socketApi;
   List chains = [];
 
+  @override
+  void initState() {
+    super.initState();
+    connect().then((_) => requestChains());
+  }
+
   Future<void> connect() async {
     socketApi = SocketApi('/tmp/ehr.sock');
     try {
@@ -52,8 +57,6 @@ class _WelcomePageState extends State<WelcomePage> {
 
   @override
   Widget build(BuildContext context) {
-    connect().then((_) => requestChains());
-
     List<Widget> columnChildren = [];
 
     if (chains.isNotEmpty) {
@@ -72,7 +75,9 @@ class _WelcomePageState extends State<WelcomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             if (chains.isNotEmpty)
-              Expanded(
+              SizedBox(
+                height: 400,
+                width: 300,
                 child: ListView.builder(
                   itemCount: chains.length,
                   itemBuilder: (context, index) {
@@ -86,6 +91,13 @@ class _WelcomePageState extends State<WelcomePage> {
                   },
                 ),
               ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                // Handle button tap
+              },
+              child: const Text('Add Patient'),
+            ),
           ],
         ),
       ),

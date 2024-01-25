@@ -2,7 +2,7 @@
 
 1. Define UI Requirements
     - [x] User stories for user actions
-    - [ ] UI mockup designs for user stories
+    - [x] UI mockup designs for user stories
     - [x] Acceptance tests for e2e testing
 2. Define Local Socket API
     - [ ] Design client/server protocol using Unix domain sockets (between Flutter and Rust)
