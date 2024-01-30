@@ -4,7 +4,7 @@ use internal_lib::{blockchain::create_chain, database, socket };
 async fn main() {
     // Connect to local database
     let _ = database::bootstrap();
-    let _ = create_chain("Jacob Smith".to_string());
+    // let _ = create_chain("Jackson Bennett".to_string());
 
     // Open socket connections with frontend
     let _ = socket::initialize_socket().await;

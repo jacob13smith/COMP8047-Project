@@ -5,7 +5,7 @@
     - [x] UI mockup designs for user stories
     - [x] Acceptance tests for e2e testing
 2. Define Local Socket API
-    - [ ] Design client/server protocol using Unix domain sockets (between Flutter and Rust)
+    - [x] Design client/server protocol using Unix domain sockets (between Flutter and Rust)
 3. Define Blockchain and Blockchain Daemon
     - [ ] Research and define blockchain properties
     - [ ] Define network functionality
