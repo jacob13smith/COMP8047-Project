@@ -1,4 +1,4 @@
-# Blockchain Properties
+# Blockchain Functionality
 This document is where I keep rough notes about the design of each component of the blockchain.
 
 ## Creating a new chain
@@ -21,12 +21,11 @@ This requires at least creating a 'genesis' block for a user.  This is simple to
 This is a core functionality of the system.  If the current user knows the IP address of the healthcare provider that they want to give record access, they can authorize the system running at that IP address.
 
 Adding and revoking a provider will count as a block each on the chain.  Here are the steps for granting access:
-1. The data for the block will be an 'add provider' action with the provider's name and IP address in the field.
+1. The data for the block will be an 'add provider' action with the provider's name and IP address in the data field.
 2. Save the block to the local database.
 3. Distribute the block to all nodes authorized by chain (except the new provider).
 4. Connect with provider system.
-5. Send shared group key to the provider, with the genesis block.
-6. On the remote host, request updated chain for new user.  This will ask the network to send the whole chain to the provider. This may be the current node or another that responds.
+5. Send shared group key to the provider, then transmit the entire chain.
 
 ## Revoking access from a user
 A user with access to a blockchain can revoke access to other users on the blockchain. This is important to discontinue access for stale or compromised providers.

@@ -8,8 +8,8 @@
     - [x] Design client/server protocol using Unix domain sockets (between Flutter and Rust)
 3. Define Blockchain and Blockchain Daemon
     - [x] Research and define blockchain properties
-    - [ ] Define network functionality
-    - [ ] Create UML class diagram for system entities
+    - [x] Define network functionality
+    - [x] Create UML class diagram for system entities
 4. Configure Development and Testing Environment
     - [x] Create Flutter development application
     - [x] Create Rust blockchain daemon
