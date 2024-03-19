@@ -1,14 +1,36 @@
-use internal_lib::{blockchain::create_chain, database, socket };
+use internal_lib::blockchain::initialize_blockchain_thread;
+use internal_lib::socket::initialize_socket_thread;
+use internal_lib::{blockchain::create_chain, database, network::initialize_p2p, socket };
+use std::thread;
+use tokio::sync::mpsc::channel;
 
 #[tokio::main]
 async fn main() {
-    // Connect to local database
-    let _ = database::bootstrap();
-    // let _ = create_chain("Jackson Bennett".to_string());
-    let _ = create_chain("Jacob Smith".to_string());
 
-    // Open socket connections with frontend
-    let _ = socket::initialize_socket().await;
+    // Connect to local database and bootstrap tables if this is first launch
+    let _ = database::bootstrap();
+
+    // Create channels for communication between threads
+    let (socket_tx, socket_rx) = channel(10);
+    let (blockchain_tx, blockchain_rx) = channel(10);
+
+    // Spawn blockchain task
+    let blockchain_thread = tokio::spawn(async move {
+        initialize_blockchain_thread(blockchain_rx, socket_tx).await;
+    });
+
+    // Spawn socket task
+    let socket_thread = tokio::spawn(async move {
+        initialize_socket_thread(socket_rx, blockchain_tx).await;
+    });
+
+    // Wait for both tasks to complete
+    if let Err(err) = tokio::try_join!(blockchain_thread, socket_thread) {
+        eprintln!("Error running tasks: {:?}", err);
+    }
+    
+    // dev: create new chain for myself
+    // let _ = create_chain("Jacob Smith".to_string());
     
     // Run forever
     tokio::signal::ctrl_c().await.unwrap();

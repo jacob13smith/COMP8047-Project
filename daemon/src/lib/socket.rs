@@ -1,43 +1,43 @@
-use tokio::net::{UnixStream, UnixListener};
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{UnixListener, UnixStream}};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::database::fetch_chains;
+use crate::blockchain::BlockchainAction;
 
 const UNIX_SOCKET_DOMAIN: &str = "/tmp/ehr.sock";
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Request {
+pub struct Request {
     id: i64,
     action: String,
     parameters: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Response {
+pub struct Response {
     id: i64,
     data: String,
 }
 
-pub async fn initialize_socket() -> std::io::Result<()>{
+pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>){
     // Temp POC code for connection with frontend
     let _ = std::fs::remove_file(UNIX_SOCKET_DOMAIN);
-    let listener = UnixListener::bind(UNIX_SOCKET_DOMAIN)?;
+    let listener = UnixListener::bind(UNIX_SOCKET_DOMAIN).unwrap();
 
     let stream = match listener.accept().await {
         Ok((stream, addr)) => {
             println!("Got a client: {:?} - {:?}", stream, addr);
             stream
         }
-        Err(e) => return Err(e),
+        Err(_) => todo!(),
     };
 
-    // Spawn tasks to handle read and write operations concurrently
-    tokio::spawn(handle_read(stream));
-    Ok(())
+
+    // Spawn tasks to handle read operations concurrently
+    tokio::spawn(handle_read_from_client(stream, receiver_from_blockchain, sender_to_blockchain));
 }
 
-async fn handle_read(mut stream: UnixStream) {
+async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>) {
     loop {
         let mut buffer = vec![0; 1024];
 
@@ -46,13 +46,12 @@ async fn handle_read(mut stream: UnixStream) {
                 break;
             }
             Ok(n) => {
-                // Process the received data (in this example, simply print it)
                 let received_data = String::from_utf8_lossy(&buffer[..n]);
-                println!("Request received: {}", received_data);
                 let request: Request = serde_json::from_str(&received_data).unwrap();
                 let action: &str = &request.action;
+                // TODO: Describe enum or strings for actions from client
                 let response = match action {
-                    "get_chains" => get_chains(request.id),
+                    "get_chains" => request_chains(request.id, &mut receiver_from_blockchain, sender_to_blockchain.clone()).await,
                     _ => Response{id: request.id, data: "".to_string()}
                 };
                 let response_json = serde_json::to_string(&response).unwrap();
@@ -66,14 +65,15 @@ async fn handle_read(mut stream: UnixStream) {
     }
 }
 
-fn get_chains(request_id: i64) -> Response {
+async fn request_chains(request_id: i64, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> Response {
+    sender_to_blockchain.send(BlockchainAction::GetChains.val()).await.unwrap();
     let mut response = Response{id: request_id, data: "".to_string()};
-    match fetch_chains() {
-        Ok(chains) => {
-            let chains_json_string = serde_json::to_string(&chains).unwrap();
-            response.data = chains_json_string;
-        },
-        Err(err) => {}
+
+    loop {
+        if let Some(msg) = receiver_from_blockchain.recv().await {
+            response.data = msg;
+            break;
+        }
     }
 
     return response;

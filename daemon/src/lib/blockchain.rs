@@ -1,13 +1,14 @@
+use std::future::Future;
+use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
-use openssl::sha::{self, Sha256};
+use openssl::sha::Sha256;
 use openssl::symm::{Cipher, encrypt};
 use rusqlite::Result;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use rustc_serialize::hex::{self, ToHex};
+use rustc_serialize::hex::ToHex;
 use uuid::Uuid;
-use crate::database::{get_key_pair, insert_block, insert_chain, insert_shared_key};
-
+use crate::database::{get_key_pair, insert_block, insert_chain, insert_shared_key, fetch_chains};
 
 // Define the structure for a block
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +30,42 @@ pub struct Chain {
     pub name: String,
 }
 
+pub enum BlockchainAction {
+    GetChains
+}
+
+impl BlockchainAction {
+    pub fn val(&self) -> String {
+        match *self {
+            BlockchainAction::GetChains => "get_chains".to_string()
+        }
+    }
+}
+
+pub async fn initialize_blockchain_thread(mut receiver_from_socket: Receiver<String>, sender_to_socket: Sender<String>){
+    // Receive messages from the socket thread
+    loop {
+        if let Some(msg) = receiver_from_socket.recv().await {
+            match msg {
+                action if action == BlockchainAction::GetChains.val() => {
+                    let response = get_chains();
+                    sender_to_socket.send(response).await.unwrap();
+                },
+                _ => {}
+            }
+        }
+    }
+}
+
+pub fn get_chains() -> String {
+    match fetch_chains() {
+        Ok(chains) => {
+            let chains_json_string = serde_json::to_string(&chains).unwrap();
+            chains_json_string
+        },
+        Err(_) => {"".to_string()}
+    }
+}
 
 pub fn create_chain(name: String) -> Result<Chain> {
     // Generate a new symmetric key for encryption
@@ -39,6 +76,7 @@ pub fn create_chain(name: String) -> Result<Chain> {
     // Generate global id for new chain
     let id = Uuid::new_v4().to_string();
 
+    // TODO: figure out data formats for different types of transactions
     let data = "genesis";
 
     let genesis_block = Block{ 
@@ -59,8 +97,26 @@ pub fn create_chain(name: String) -> Result<Chain> {
     Ok(new_chain)
 }
 
+// TODO: Grant access for a given chain to a given IP address
+pub fn grant_access(chain_id: String, remote_ip: String) -> Result<()> {
+    
+    Ok(())
+}
+
+// TODO: Revoke access for a given chain from given IP address
+pub fn revoke_access(chain_id: String, remote_ip: String) -> Result<()> {
+    
+    Ok(())
+}
+
+// TODO: Add block to chain and propagate network
+pub fn add_block(chain_id: String, ) -> Result<()> {
+
+    Ok(())
+}
+
 fn generate_shared_key() -> [u8; 32] {
-    let mut key = [0u8; 32];
+    let mut key: [u8; 32] = [0u8; 32];
     OsRng.fill_bytes(&mut key);
     key
 }
