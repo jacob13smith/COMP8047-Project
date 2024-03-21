@@ -1,4 +1,3 @@
-use std::future::Future;
 use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
 use openssl::sha::Sha256;
@@ -30,26 +29,38 @@ pub struct Chain {
     pub name: String,
 }
 
-pub enum BlockchainAction {
-    GetChains
+#[derive(Serialize, Deserialize)]
+pub struct CreateChainParams {
+    pub chain_name: String
 }
 
-impl BlockchainAction {
-    pub fn val(&self) -> String {
-        match *self {
-            BlockchainAction::GetChains => "get_chains".to_string()
-        }
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BlockchainRequest {
+    pub action: String,
+    pub parameters: serde_json::Map<String, serde_json::Value>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BlockchainResponse {
+    pub ok: bool,
+    pub data: serde_json::Value,
 }
 
 pub async fn initialize_blockchain_thread(mut receiver_from_socket: Receiver<String>, sender_to_socket: Sender<String>){
     // Receive messages from the socket thread
     loop {
         if let Some(msg) = receiver_from_socket.recv().await {
-            match msg {
-                action if action == BlockchainAction::GetChains.val() => {
+            let blockchain_request: BlockchainRequest = serde_json::from_str(&msg).unwrap();
+            match blockchain_request.action.as_str() {
+                "get_chains" => {
                     let response = get_chains();
-                    sender_to_socket.send(response).await.unwrap();
+                    sender_to_socket.send(serde_json::to_string(&response).unwrap()).await.unwrap();
+                },
+                "create_chain" => {
+                    // Need to get parameters from socket message here and use them
+                    let name = &blockchain_request.parameters["name"];
+                    let response = create_chain(name.as_str().unwrap().to_string());
+                    sender_to_socket.send(serde_json::to_string(&response).unwrap()).await.unwrap();
                 },
                 _ => {}
             }
@@ -57,17 +68,17 @@ pub async fn initialize_blockchain_thread(mut receiver_from_socket: Receiver<Str
     }
 }
 
-pub fn get_chains() -> String {
+pub fn get_chains() -> BlockchainResponse {
     match fetch_chains() {
         Ok(chains) => {
-            let chains_json_string = serde_json::to_string(&chains).unwrap();
-            chains_json_string
+            let chains_json_string = serde_json::to_value(&chains).unwrap();
+            BlockchainResponse{ok: true, data: chains_json_string}
         },
-        Err(_) => {"".to_string()}
+        Err(_) => {BlockchainResponse{ok: false, data: serde_json::Value::Null}}
     }
 }
 
-pub fn create_chain(name: String) -> Result<Chain> {
+pub fn create_chain(name: String) -> BlockchainResponse {
     // Generate a new symmetric key for encryption
     let shared_key = generate_shared_key();
     let shared_key_hash = hash_shared_key(&shared_key);
@@ -94,7 +105,8 @@ pub fn create_chain(name: String) -> Result<Chain> {
     let _ = insert_chain(&new_chain);
     let _ = insert_block(&genesis_block);
     let _ = insert_shared_key(&shared_key, id);
-    Ok(new_chain)
+    
+    BlockchainResponse{ok: true, data: serde_json::Value::Null}
 }
 
 // TODO: Grant access for a given chain to a given IP address

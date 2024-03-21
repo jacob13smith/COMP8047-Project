@@ -1,20 +1,21 @@
+use serde_json::{json};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{UnixListener, UnixStream}};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use crate::blockchain::BlockchainAction;
+use crate::blockchain::{self, BlockchainRequest, BlockchainResponse};
 
 const UNIX_SOCKET_DOMAIN: &str = "/tmp/ehr.sock";
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Request {
+pub struct SocketRequest {
     id: i64,
     action: String,
-    parameters: Option<serde_json::Value>,
+    parameters: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Response {
+pub struct SocketResponse {
     id: i64,
     data: String,
 }
@@ -47,12 +48,15 @@ async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_block
             }
             Ok(n) => {
                 let received_data = String::from_utf8_lossy(&buffer[..n]);
-                let request: Request = serde_json::from_str(&received_data).unwrap();
+                println!("{}", received_data);
+                let request: SocketRequest = serde_json::from_str(&received_data).unwrap();
                 let action: &str = &request.action;
+                let parameters = &request.parameters;
                 // TODO: Describe enum or strings for actions from client
                 let response = match action {
                     "get_chains" => request_chains(request.id, &mut receiver_from_blockchain, sender_to_blockchain.clone()).await,
-                    _ => Response{id: request.id, data: "".to_string()}
+                    "create_chain" => create_chain(request.id, parameters["name"].as_str().unwrap().to_string(), &mut receiver_from_blockchain, sender_to_blockchain.clone()).await,
+                    _ => SocketResponse{id: request.id, data: "".to_string()}
                 };
                 let response_json = serde_json::to_string(&response).unwrap();
                 stream.write_all(response_json.as_bytes()).await.unwrap();
@@ -65,16 +69,37 @@ async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_block
     }
 }
 
-async fn request_chains(request_id: i64, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> Response {
-    sender_to_blockchain.send(BlockchainAction::GetChains.val()).await.unwrap();
-    let mut response = Response{id: request_id, data: "".to_string()};
+async fn request_chains(request_id: i64, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> SocketResponse {
+    sender_to_blockchain.send(serde_json::to_string(&BlockchainRequest{action: "get_chains".to_string(), parameters: serde_json::Map::default()}).unwrap()).await.unwrap();
+    let mut response = SocketResponse{id: request_id, data: "".to_string()};
 
     loop {
         if let Some(msg) = receiver_from_blockchain.recv().await {
-            response.data = msg;
+            let blockchain_response: BlockchainResponse = serde_json::from_str(&msg).unwrap();
+            if blockchain_response.ok {
+                response.data = blockchain_response.data.to_string();
+            }
             break;
         }
     }
 
-    return response;
+    response
+}
+
+async fn create_chain(request_id: i64, name: String, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> SocketResponse {
+    let mut parameters = serde_json::Map::new();
+    parameters.insert("name".to_string(), serde_json::Value::String(name));
+    sender_to_blockchain.send(serde_json::to_string(&BlockchainRequest{action: "create_chain".to_string(), parameters: parameters }).unwrap()).await.unwrap();
+    let mut response = SocketResponse{id: request_id, data: "".to_string()};
+    
+    loop {
+        if let Some(msg) = receiver_from_blockchain.recv().await {
+            let blockchain_response: BlockchainResponse = serde_json::from_str(&msg).unwrap();
+            if blockchain_response.ok {
+                response.data = blockchain_response.data.to_string();
+            }
+            break;
+        }
+    }
+    response
 }
