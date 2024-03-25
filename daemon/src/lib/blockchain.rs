@@ -25,6 +25,12 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockData {
+    pub action: String,
+    pub fields: serde_json::Map<String, Value>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chain {
     pub id: String,
     pub first_name: String,

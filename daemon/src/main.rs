@@ -28,9 +28,6 @@ async fn main() {
         eprintln!("Error running tasks: {:?}", err);
     }
     
-    // dev: create new chain for myself
-    // let _ = create_chain("Jacob Smith".to_string());
-    
     // Run forever
     tokio::signal::ctrl_c().await.unwrap();
 }
