@@ -1,5 +1,6 @@
 import 'socket_api.dart';
-
+// ignore: depend_on_referenced_packages
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -34,9 +35,15 @@ class _WelcomePageState extends State<WelcomePage> {
   late SocketApi socketApi;
   List chains = [];
 
+  DateTime? _selectedDate;
+  late TextEditingController _dateController;
+  final TextEditingController _firstNameController = TextEditingController();
+  final TextEditingController _lastNameController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
+    _dateController = TextEditingController();
     connect().then((_) => requestChains());
   }
 
@@ -76,10 +83,11 @@ class _WelcomePageState extends State<WelcomePage> {
                 itemCount: chains.length,
                 itemBuilder: (context, index) {
                   return ListTile(
-                    title: Text(chains[index]['name']),
+                    title: Text(
+                        '${chains[index]['last_name']}, ${chains[index]['first_name']}'),
                     onTap: () {
                       // Handle button tap (e.g., navigate to a new screen)
-                      print('Button tapped: ${chains[index]['name']}');
+                      print('Button tapped: ${chains[index]['last_name']}');
                     },
                   );
                 },
@@ -89,12 +97,95 @@ class _WelcomePageState extends State<WelcomePage> {
             ElevatedButton(
               onPressed: () async {
                 // Handle button tap
-                Map<String, dynamic> jsonRequest = {
-                  'action': 'create_chain',
-                  'parameters': {'name': 'Test User'}
-                };
-                await socketApi.sendRequest(jsonRequest);
-                requestChains();
+                showModalBottomSheet(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return SingleChildScrollView(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 10.0, horizontal: 20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            const Text(
+                              'Add Patient',
+                              style: TextStyle(
+                                fontSize: 24.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 20.0),
+                            // Add your form fields here
+                            // Example TextField:
+                            TextField(
+                              controller: _firstNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'First Name',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 20.0),
+                            TextField(
+                              controller: _lastNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Last Name',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 20.0),
+                            // Date of Birth picker
+                            TextFormField(
+                              onTap: () async {
+                                final DateTime? pickedDate =
+                                    await showDatePicker(
+                                  context: context,
+                                  initialDate: _selectedDate ?? DateTime.now(),
+                                  firstDate: DateTime(1900),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (pickedDate != null) {
+                                  setState(() {
+                                    _selectedDate = pickedDate;
+                                    _dateController.text =
+                                        DateFormat('yyyy-MM-dd')
+                                            .format(_selectedDate!);
+                                  });
+                                }
+                              },
+                              readOnly: true, // Make the text field read-only
+                              controller: _dateController,
+                              decoration: const InputDecoration(
+                                labelText: 'Date of Birth',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 20.0),
+                            ElevatedButton(
+                              onPressed: () async {
+                                String firstName = _firstNameController.text;
+                                String lastName = _lastNameController.text;
+                                String dateOfBirth = _dateController.text;
+
+                                Map<String, dynamic> jsonRequest = {
+                                  'action': 'create_chain',
+                                  'parameters': {
+                                    'first_name': firstName,
+                                    'last_name': lastName,
+                                    'date_of_birth': dateOfBirth
+                                  }
+                                };
+                                await socketApi.sendRequest(jsonRequest).then(
+                                    (response) => {Navigator.pop(context)});
+                                requestChains();
+                              },
+                              child: const Text('Create Patient File'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
               },
               child: const Text('Add Patient'),
             ),

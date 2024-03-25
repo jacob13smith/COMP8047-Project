@@ -12,18 +12,20 @@ pub struct KeyPair {
 
 pub fn insert_chain(chain: &Chain) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
-    conn.execute("INSERT INTO chains (id, name) VALUES (?1, ?2)", params![chain.id, chain.name])?;
+    conn.execute("INSERT INTO chains (id, first_name, last_name, date_of_birth) VALUES (?1, ?2, ?3, ?4)", params![chain.id, chain.first_name, chain.last_name, chain.date_of_birth])?;
     Ok(())
 }
 
 pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
     let conn = Connection::open(DB_STRING)?;
-    let query = "SELECT id, name FROM chains";
+    let query = "SELECT id, first_name, last_name, date_of_birth FROM chains";
     let mut stmt = conn.prepare(query)?;
     let chain_iter = stmt.query_map([], |row| {
         Ok(Chain {
             id: row.get(0)?,
-            name: row.get(1)?,
+            first_name: row.get(1)?,
+            last_name: row.get(2)?,
+            date_of_birth: row.get(2)?
         })
     })?;
 
@@ -124,7 +126,9 @@ fn create_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS chains (
             id TEXT PRIMARY KEY,
-            name TEXT NOT NULL
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            date_of_birth TEXT NOT NULL
          )",
         [],
     )?;
