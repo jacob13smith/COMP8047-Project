@@ -1,6 +1,6 @@
 use internal_lib::blockchain::initialize_blockchain_thread;
 use internal_lib::socket::initialize_socket_thread; 
-use internal_lib::{blockchain::create_chain, database, network::initialize_p2p, socket };
+use internal_lib::{database, network::initialize_p2p, socket };
 use tokio::sync::mpsc::channel;
 
 #[tokio::main]

@@ -2,11 +2,11 @@ use serde_json::{from_str, to_string, to_value, Map, Value};
 use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
 use openssl::sha::Sha256;
-use openssl::symm::{Cipher, encrypt};
+use openssl::symm::{Cipher, encrypt, decrypt};
 use rusqlite::Result;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use rustc_serialize::hex::ToHex;
+use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
 use crate::database::{get_key_pair, insert_block, insert_chain, insert_shared_key, fetch_chains};
 
@@ -100,18 +100,25 @@ pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
     let id = Uuid::new_v4().to_string();
 
     // TODO: figure out data formats for different types of transactions
-    let data = "genesis";
+    let data = BlockData{ action: "genesis".to_string(), fields: parameters };
+    let encrypted_data = encrypt_data(&data, &shared_key);
+    let hashed_data = hash_data(&data);
+
+    // dev
+    // let decrypted_data = decrypt_data(&encrypted_data, &shared_key);
+    // println!("Decrypted data: {}", to_string(&decrypted_data).unwrap());
 
     let genesis_block = Block{ 
         chain_id: id.clone(), 
         id: 0, 
         timestamp: Utc::now().timestamp(), 
-        data: encrypt_data(data, &shared_key), 
+        data: encrypted_data,
         previous_hash: 0.to_string(), 
-        hash: hash_data(data.to_string()).to_string(), 
+        hash: "0".to_string(), 
         provider_key: my_key.public_key,
         shared_key_hash: shared_key_hash,
-        data_hash: hash_data(data.to_string())};
+        data_hash: hashed_data
+    };
 
     let new_chain = Chain { first_name: first_name, last_name: last_name, date_of_birth: date_of_birth, id: id.clone() };
     let _ = insert_chain(&new_chain);
@@ -123,19 +130,16 @@ pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
 
 // TODO: Grant access for a given chain to a given IP address
 pub fn grant_access(chain_id: String, remote_ip: String) -> Result<()> {
-    
     Ok(())
 }
 
 // TODO: Revoke access for a given chain from given IP address
 pub fn revoke_access(chain_id: String, remote_ip: String) -> Result<()> {
-    
     Ok(())
 }
 
 // TODO: Add block to chain and propagate network
 pub fn add_block(chain_id: String, ) -> Result<()> {
-
     Ok(())
 }
 
@@ -152,17 +156,30 @@ fn hash_shared_key(key: &[u8]) -> String {
     result.to_hex()
 }
 
-fn hash_data(data: String) -> String {
+fn hash_data(data: &BlockData) -> String {
     let mut sha256 = Sha256::new();
-    sha256.update(data.as_bytes());
+    sha256.update(to_string(data).unwrap().as_bytes());
     let result = sha256.finish();
     result.to_hex()
 }
 
-fn encrypt_data(data: &str, key: &[u8]) -> String {
+fn encrypt_data(data: &BlockData, key: &[u8]) -> String {
     let cipher = Cipher::aes_256_cbc();
-    let iv = [0; 16]; // Initialization vector (IV) for CBC mode, must be securely random in a real application
-    let ciphertext = encrypt(cipher, key, Some(&iv), data.as_bytes()).unwrap();
+    // TODO: Figure out the IV for each block
+    let iv = [0; 16];
+    let ciphertext = encrypt(cipher, key, Some(&iv), to_string(data).unwrap().as_bytes()).unwrap();
     let hex_encoded_ciphertext = ciphertext.to_hex();
     hex_encoded_ciphertext
+}
+
+fn decrypt_data(encrypted_data: &str, key: &[u8]) -> BlockData {
+    let cipher = Cipher::aes_256_cbc();
+    // TODO: Figure out the IV for each block
+    let iv = [0; 16];
+    let ciphertext = encrypted_data.from_hex().unwrap();
+    let decrypted_data = decrypt(cipher, key, Some(&iv), &ciphertext).expect("Decryption error");
+    let decrypted_string = String::from_utf8(decrypted_data).expect("UTF-8 decoding error");
+
+    // Parse the JSON string into BlockData struct
+    from_str(&decrypted_string).expect("JSON deserialization error")
 }
