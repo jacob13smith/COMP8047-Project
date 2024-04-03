@@ -18,6 +18,10 @@ class PatientPage extends StatefulWidget {
 
 class _PatientPage extends State<PatientPage> {
   Map info = {};
+
+  final TextEditingController _providerNameController = TextEditingController();
+  final TextEditingController _providerIPController = TextEditingController();
+
   void requestPatientInfo() async {
     Map<String, dynamic> jsonRequest = {
       'action': 'get_patient_info',
@@ -83,12 +87,94 @@ class _PatientPage extends State<PatientPage> {
                       border: Border.all(color: Colors.black), // Add border
                     ),
                     padding: const EdgeInsets.all(16.0),
-                    child: const Column(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Providers',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 24)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Providers',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 24)),
+                            IconButton(
+                              icon: const Icon(Icons.add),
+                              onPressed: () {
+                                showModalBottomSheet(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return SingleChildScrollView(
+                                          child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 10.0,
+                                                      horizontal: 20.0),
+                                              child: Column(children: [
+                                                const Text(
+                                                  'Add Provider',
+                                                  style: TextStyle(
+                                                    fontSize: 24.0,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 20.0),
+                                                TextField(
+                                                  controller:
+                                                      _providerNameController,
+                                                  decoration:
+                                                      const InputDecoration(
+                                                    labelText: 'Name',
+                                                    border:
+                                                        OutlineInputBorder(),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 20.0),
+                                                TextField(
+                                                  controller:
+                                                      _providerIPController,
+                                                  decoration:
+                                                      const InputDecoration(
+                                                    labelText: 'IP Address',
+                                                    border:
+                                                        OutlineInputBorder(),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 20.0),
+                                                ElevatedButton(
+                                                  onPressed: () async {
+                                                    String providerName =
+                                                        _providerNameController
+                                                            .text;
+                                                    String providerIp =
+                                                        _providerIPController
+                                                            .text;
+
+                                                    Map<String, dynamic>
+                                                        jsonRequest = {
+                                                      'action': 'add_provider',
+                                                      'parameters': {
+                                                        'chain_id': widget.id,
+                                                        'name': providerName,
+                                                        'ip': providerIp,
+                                                      }
+                                                    };
+                                                    await widget.socketApi
+                                                        .sendRequest(
+                                                            jsonRequest)
+                                                        .then((response) => {
+                                                              Navigator.pop(
+                                                                  context)
+                                                            });
+                                                  },
+                                                  child: const Text(
+                                                      'Add Provider'),
+                                                )
+                                              ])));
+                                    });
+                                // Open modal for adding provider
+                              },
+                            )
+                          ],
+                        )
                         // Add list of providers here
                       ],
                     ),

@@ -25,8 +25,7 @@ pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>
     let listener = UnixListener::bind(UNIX_SOCKET_DOMAIN).unwrap();
 
     let stream = match listener.accept().await {
-        Ok((stream, addr)) => {
-            println!("Got a client: {:?} - {:?}", stream, addr);
+        Ok((stream, _)) => {
             stream
         }
         Err(_) => todo!(),

@@ -1,3 +1,5 @@
+use std::f64::consts::E;
+
 use serde_json::{from_str, to_string, to_value, Map, Value};
 use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
@@ -8,9 +10,10 @@ use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
-use crate::database::{fetch_all_blocks, fetch_chains, get_key_pair, get_shared_key, insert_block, insert_chain, insert_shared_key};
+use crate::database::{fetch_all_blocks, fetch_chains, fetch_last_block, get_key_pair, get_shared_key, insert_block, insert_chain, insert_shared_key};
 
 // Define the structure for a block
+// TODO: Remove the shared_key_hash since it changes between re-encryption and messes up the blockchain property
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub chain_id: String,
@@ -73,6 +76,10 @@ pub async fn initialize_blockchain_thread(mut receiver_from_socket: Receiver<Str
                 "get_patient_info" => {
                     let response = get_patient_info(blockchain_request.parameters.get("id").unwrap().as_str().unwrap().to_string());
                     sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                },
+                "add_provider" => {
+                    let response = add_provider(blockchain_request.parameters);
+                    sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
                 }
                 _ => {}
             }
@@ -120,6 +127,36 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
         },
         Err(_) => {BlockchainResponse{ok: false, data: Value::Null}}
     }
+}
+
+pub fn add_provider(parameters: Map<String, Value>) -> BlockchainResponse {
+    let chain_id = parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
+
+    let shared_key_vec = get_shared_key(chain_id.clone()).unwrap();
+    let shared_key = shared_key_vec.as_slice();
+    let shared_key_hash = hash_shared_key(&shared_key);
+    let my_key = get_key_pair().unwrap().expect("Expected KeyPair");
+
+    let data = BlockData{action:"add-provider".to_string(), fields: parameters};
+    let encrypted_data = encrypt_data(&data, &shared_key);
+    let hashed_data = hash_data(&data);
+
+    let last_block = get_last_block(chain_id.clone());
+    let add_provider_block = Block{
+        chain_id: chain_id,
+        id: last_block.id + 1,
+        timestamp: Utc::now().timestamp(), 
+        data: encrypted_data,
+        previous_hash: last_block.hash,
+        hash: "0".to_string(), // TODO: Hash this properly
+        provider_key: my_key.public_key,
+        shared_key_hash: shared_key_hash,
+        data_hash: hashed_data
+    };
+
+    let _ = insert_block(&add_provider_block);
+
+    BlockchainResponse{ok: true, data: Value::Null}
 }
 
 pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
@@ -177,6 +214,13 @@ pub fn revoke_access(chain_id: String, remote_ip: String) -> Result<()> {
 // TODO: Add block to chain and propagate network
 pub fn add_block(chain_id: String, ) -> Result<()> {
     Ok(())
+}
+
+pub fn get_last_block(chain_id: String) -> Block {
+    match fetch_last_block(chain_id) {
+        Ok(block) => { return block },
+        Err(_) => { panic!("Expected a block for this chain") }
+    }
 }
 
 fn generate_shared_key() -> [u8; 32] {

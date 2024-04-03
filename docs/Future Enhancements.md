@@ -15,3 +15,10 @@ This document is a collection of ideas for enhancements to the system, if it wer
 
 - Unit testing for all internally created functions
   - For a production-level system, I would want to have unit tests to test all components and integrations with eachother. This would be too much work for the time constraint of this project.
+
+- Provider-specific permissions per record/record type
+  - Currently, if a provider is permitted to access a patient file (blockchain), they will get access to all the patient records.  It would be ideal to have the ability to restrict which types or records or indicidual records a specific provider is given access for.
+
+- Healthcare provider discovery system
+
+- Remote access request by new provider

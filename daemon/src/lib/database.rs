@@ -74,6 +74,34 @@ pub fn insert_block(block: &Block) -> Result<()> {
     Ok(())
 }
 
+pub fn fetch_last_block(chain_id: String) -> Result<Block> {
+    let conn = Connection::open(DB_STRING)?;
+
+    // TODO: Remove unneeded fields here
+    let query = format!(
+        "SELECT chain_id, id, timestamp, data, previous_hash, hash, provider_key, shared_key_hash, data_hash FROM blocks WHERE chain_id = ? AND id = (SELECT MAX(id) FROM blocks WHERE chain_id = ?)"
+    );
+
+    let mut statement = conn.prepare(&query)?;
+    let mut rows = statement.query(params![chain_id, chain_id])?;
+
+    if let Some(row) = rows.next()? {
+        Ok(Block{
+            chain_id: row.get(0)?,
+            id: row.get(1)?,
+            timestamp: row.get(2)?,
+            data: row.get(3)?,
+            previous_hash: row.get(4)?,
+            hash: row.get(5)?,
+            provider_key: row.get(6)?,
+            shared_key_hash: row.get(7)?,
+            data_hash: row.get(8)?,
+        })
+    } else {
+        Err(rusqlite::Error::QueryReturnedNoRows.into())
+    }
+}
+
 pub fn insert_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
     conn.execute(
