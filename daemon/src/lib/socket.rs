@@ -32,7 +32,6 @@ pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>
         Err(_) => todo!(),
     };
 
-
     // Spawn tasks to handle read operations concurrently
     tokio::spawn(handle_read_from_client(stream, receiver_from_blockchain, sender_to_blockchain));
 }
@@ -51,12 +50,7 @@ async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_block
                 let request: SocketRequest = from_str(&received_data).unwrap();
                 let action: &str = &request.action;
                 let parameters = &request.parameters;
-                // TODO: Describe enum or strings for actions from client
-                let response = match action {
-                    "get_chains" => request_chains(request.id, &mut receiver_from_blockchain, sender_to_blockchain.clone()).await,
-                    "create_chain" => create_chain(request.id, parameters, &mut receiver_from_blockchain, sender_to_blockchain.clone()).await,
-                    _ => SocketResponse{id: request.id, data: "".to_string()}
-                };
+                let response = request_blockchain(request.id, action.to_string(), parameters, &mut receiver_from_blockchain, sender_to_blockchain.clone()).await;
                 let response_json = to_string(&response).unwrap();
                 stream.write_all(response_json.as_bytes()).await.unwrap();
             }
@@ -68,26 +62,10 @@ async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_block
     }
 }
 
-async fn request_chains(request_id: i64, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> SocketResponse {
-    sender_to_blockchain.send(to_string(&BlockchainRequest{action: "get_chains".to_string(), parameters: Map::default()}).unwrap()).await.unwrap();
+async fn request_blockchain(request_id: i64, action: String, parameters: &Map<String, Value>, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> SocketResponse {
+    sender_to_blockchain.send(to_string(&BlockchainRequest{action: action, parameters: parameters.clone() }).unwrap()).await.unwrap();
     let mut response = SocketResponse{id: request_id, data: "".to_string()};
 
-    loop {
-        if let Some(msg) = receiver_from_blockchain.recv().await {
-            let blockchain_response: BlockchainResponse = from_str(&msg).unwrap();
-            if blockchain_response.ok {
-                response.data = blockchain_response.data.to_string();
-            }
-            break;
-        }
-    }
-    response
-}
-
-async fn create_chain(request_id: i64, parameters: &Map<String, Value>, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> SocketResponse {
-    sender_to_blockchain.send(to_string(&BlockchainRequest{action: "create_chain".to_string(), parameters: parameters.clone() }).unwrap()).await.unwrap();
-    let mut response = SocketResponse{id: request_id, data: "".to_string()};
-    
     loop {
         if let Some(msg) = receiver_from_blockchain.recv().await {
             let blockchain_response: BlockchainResponse = from_str(&msg).unwrap();

@@ -33,6 +33,26 @@ pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
     chains
 }
 
+pub fn fetch_all_blocks(id: String) -> Result<Vec<(i64, String)>> {
+    let conn = Connection::open(DB_STRING)?;
+
+    let mut statement = conn.prepare("SELECT timestamp, data FROM blocks WHERE chain_id = ? ORDER BY timestamp ASC").unwrap();
+    let blocks = statement.query_map(params![id], |row| {
+        Ok((
+            row.get::<usize, i64>(0)?,
+            row.get::<usize, String>(1)?,
+        ))
+    })?;
+
+    let mut result = Vec::new();
+
+    for block in blocks {
+        result.push(block?);
+    }
+
+    Ok(result)
+}
+
 pub fn get_next_chain_id() -> Result<i64> {
     let conn = Connection::open(DB_STRING)?;
     let query = format!(
@@ -61,6 +81,20 @@ pub fn insert_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
         params![chain_id, &shared_key, true],
     )?;
     Ok(())
+}
+
+pub fn get_shared_key(id: String) -> Result<Vec<u8>> {
+    let conn = Connection::open(DB_STRING)?;
+
+    let mut statement = conn.prepare("SELECT value FROM shared_keys WHERE chain_id = ? AND active = 1")?;
+    let mut rows = statement.query(params![id])?;
+
+    if let Some(row) = rows.next()? {
+        let shared_key: Vec<u8> = row.get(0)?;
+        Ok(shared_key)
+    } else {
+        Err(rusqlite::Error::QueryReturnedNoRows)
+    }
 }
 
 pub fn bootstrap() -> Result<()> {

@@ -8,7 +8,7 @@ use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
-use crate::database::{get_key_pair, insert_block, insert_chain, insert_shared_key, fetch_chains};
+use crate::database::{fetch_all_blocks, fetch_chains, get_key_pair, get_shared_key, insert_block, insert_chain, insert_shared_key};
 
 // Define the structure for a block
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +70,10 @@ pub async fn initialize_blockchain_thread(mut receiver_from_socket: Receiver<Str
                     let response = create_chain(blockchain_request.parameters);
                     sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
                 },
+                "get_patient_info" => {
+                    let response = get_patient_info(blockchain_request.parameters.get("id").unwrap().as_str().unwrap().to_string());
+                    sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                }
                 _ => {}
             }
         }
@@ -81,6 +85,38 @@ pub fn get_chains() -> BlockchainResponse {
         Ok(chains) => {
             let chains_json_string = to_value(&chains).unwrap();
             BlockchainResponse{ok: true, data: chains_json_string}
+        },
+        Err(_) => {BlockchainResponse{ok: false, data: Value::Null}}
+    }
+}
+
+pub fn get_patient_info(id: String) -> BlockchainResponse {
+    let shared_key_vec = get_shared_key(id.clone()).unwrap();
+    let shared_key = shared_key_vec.as_slice();
+    
+    match fetch_all_blocks(id){
+        Ok(blocks) => {
+            let mut data: Map<String, Value> = Map::default();
+
+            // For now, records are of shape: id, date, subject, provider_name
+            let mut records:Vec<(i64, String, String, String)> = vec![];
+
+            // For now, providers are of shape: id, name, ip_address
+            let mut providers: Vec<(i64, String, String)> = vec![];
+
+            // TODO: Process each block into either a record or provider, or adjust the providers given subsequent providers revoking
+            for (_, encrypted_data) in blocks {
+                let block_data = decrypt_data(&encrypted_data, shared_key);
+                match block_data.action.as_str() {
+                    "genesis" => {
+                        data.insert("date_of_birth".to_string(), block_data.fields.get("date_of_birth").unwrap().clone());
+                    },
+                    _ => {}
+                }
+            }
+
+            let patient_blocks_string = to_value(&data).unwrap();
+            BlockchainResponse{ok: true, data: patient_blocks_string}
         },
         Err(_) => {BlockchainResponse{ok: false, data: Value::Null}}
     }
