@@ -1,7 +1,7 @@
 use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::Duration};
 
 use libp2p::{
-    futures::StreamExt, gossipsub, identity::Keypair, mdns, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp::Config, yamux, Multiaddr, SwarmBuilder
+    futures::StreamExt, gossipsub, identify, identity::Keypair, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp::Config, yamux, Multiaddr, SwarmBuilder
 };
 
 use tokio::{io, io::AsyncBufReadExt, select};
@@ -9,7 +9,8 @@ use crate::{blockchain::Block, database::get_key_pair};
 
 #[derive(NetworkBehaviour)]
 struct P2PBehaviour {
-    gossipsub: gossipsub::Behaviour
+    gossipsub: gossipsub::Behaviour,
+    identify: identify::Behaviour
 }
 
 
@@ -45,8 +46,13 @@ pub async fn initialize_p2p() {
                     gossipsub::MessageAuthenticity::Signed(key.clone()),
                     gossipsub_config,
                 )?;
+
+                let identify = identify::Behaviour::new(identify::Config::new(
+                    "/ipfs/id/1.0.0".to_string(),
+                    key.public(),
+                ));
     
-                Ok(P2PBehaviour { gossipsub })
+                Ok(P2PBehaviour { gossipsub, identify })
             }).unwrap()
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
@@ -78,16 +84,21 @@ pub async fn initialize_p2p() {
                     }
                 }
                 event = swarm.select_next_some() => match event {
+                    SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
                     SwarmEvent::Behaviour(P2PBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                         propagation_source: peer_id,
                         message_id: id,
                         message,
                     })) => println!(
-                            "Got message: '{}' with id: {id} from peer: {peer_id}",
-                            String::from_utf8_lossy(&message.data),
-                        ),
-                    SwarmEvent::NewListenAddr { address, .. } => {
-                        println!("Local node is listening on {address}");
+                        "Got message: '{}' with id: {id} from peer: {peer_id}",
+                        String::from_utf8_lossy(&message.data),
+                    ),
+                    SwarmEvent::Behaviour(P2PBehaviourEvent::Identify(identify::Event::Sent { peer_id })) => {
+                        println!("Sent identify info to {peer_id:?}")
+                    },
+                    // Prints out the info received via the identify event
+                    SwarmEvent::Behaviour(P2PBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+                        println!("Received {info:?}\nFrom {peer_id}")
                     }
                     _ => {}
                 }
