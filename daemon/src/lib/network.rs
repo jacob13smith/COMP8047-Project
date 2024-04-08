@@ -1,7 +1,7 @@
 use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::Duration};
 
 use libp2p::{
-    futures::StreamExt, gossipsub, identity::Keypair, mdns, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp::Config, yamux, SwarmBuilder
+    futures::StreamExt, gossipsub, identity::Keypair, mdns, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp::Config, yamux, Multiaddr, SwarmBuilder
 };
 
 use tokio::{io, io::AsyncBufReadExt, select};
@@ -9,8 +9,7 @@ use crate::{blockchain::Block, database::get_key_pair};
 
 #[derive(NetworkBehaviour)]
 struct P2PBehaviour {
-    gossipsub: gossipsub::Behaviour,
-    mdns: mdns::tokio::Behaviour,
+    gossipsub: gossipsub::Behaviour
 }
 
 
@@ -47,27 +46,28 @@ pub async fn initialize_p2p() {
                     gossipsub_config,
                 )?;
     
-                let mdns =
-                    mdns::tokio::Behaviour::new(mdns::Config::default(), key.public().to_peer_id())?;
-                Ok(P2PBehaviour { gossipsub, mdns })
+                Ok(P2PBehaviour { gossipsub })
             }).unwrap()
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
         
-        let topic = gossipsub::IdentTopic::new("test-net");
+        let topic = gossipsub::IdentTopic::new("authorize_chain");
         
         swarm.behaviour_mut().gossipsub.subscribe(&topic).unwrap();
         let mut stdin = io::BufReader::new(io::stdin()).lines();
 
-        swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap()).unwrap();
         swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
-        // Create a Gossipsub topic
 
-        println!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
+        let addr = "192.168.2.128".to_string();
+        let remote: Multiaddr = addr.parse().unwrap();
+        swarm.dial(remote).unwrap();
+        println!("Dialed {addr}");
+        
 
         // Kick it off
         loop {
             select! {
+                // TODO: Replace the stdin with messages coming from the blockchain thread
                 Ok(Some(line)) = stdin.next_line() => {
                     if let Err(e) = swarm
                         .behaviour_mut().gossipsub
@@ -76,18 +76,6 @@ pub async fn initialize_p2p() {
                     }
                 }
                 event = swarm.select_next_some() => match event {
-                    SwarmEvent::Behaviour(P2PBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
-                        for (peer_id, _multiaddr) in list {
-                            swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
-                            println!("mDNS discovered a new peer: {peer_id}");
-                        }
-                    },
-                    SwarmEvent::Behaviour(P2PBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
-                        for (peer_id, _multiaddr) in list {
-                            println!("mDNS discover peer has expired: {peer_id}");
-                            swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
-                        }
-                    },
                     SwarmEvent::Behaviour(P2PBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                         propagation_source: peer_id,
                         message_id: id,
