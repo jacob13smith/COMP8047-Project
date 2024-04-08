@@ -97,8 +97,9 @@ pub async fn initialize_p2p() {
                         println!("Sent identify info to {peer_id:?}")
                     },
                     // Prints out the info received via the identify event
-                    SwarmEvent::Behaviour(P2PBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
-                        println!("Received {info:?}\nFrom {peer_id}")
+                    SwarmEvent::Behaviour(P2PBehaviourEvent::Identify(identify::Event::Received { peer_id, .. })) => {
+                        swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                        println!("Connected to peer with id {peer_id}")
                     }
                     _ => {}
                 }
