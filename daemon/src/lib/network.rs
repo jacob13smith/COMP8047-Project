@@ -1,7 +1,7 @@
 use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::Duration};
 
 use libp2p::{
-    futures::StreamExt, gossipsub, identity::Keypair, mdns, noise, swarm::{behaviour, NetworkBehaviour, SwarmEvent}, tcp::Config, yamux, SwarmBuilder
+    futures::StreamExt, gossipsub, identity::Keypair, mdns, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp::Config, yamux, SwarmBuilder
 };
 
 use tokio::{io, io::AsyncBufReadExt, select};
@@ -53,15 +53,13 @@ pub async fn initialize_p2p() {
             }).unwrap()
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
-
-        println!("Built swarm");
         
         let topic = gossipsub::IdentTopic::new("test-net");
         
+        swarm.behaviour_mut().gossipsub.subscribe(&topic).unwrap();
         let mut stdin = io::BufReader::new(io::stdin()).lines();
 
         swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap()).unwrap();
-        println!("Swarm listnening");
         swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
         // Create a Gossipsub topic
 
@@ -80,8 +78,8 @@ pub async fn initialize_p2p() {
                 event = swarm.select_next_some() => match event {
                     SwarmEvent::Behaviour(P2PBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                         for (peer_id, _multiaddr) in list {
-                            println!("mDNS discovered a new peer: {peer_id}");
                             swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                            println!("mDNS discovered a new peer: {peer_id}");
                         }
                     },
                     SwarmEvent::Behaviour(P2PBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
