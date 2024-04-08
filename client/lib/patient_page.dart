@@ -17,7 +17,7 @@ class PatientPage extends StatefulWidget {
 }
 
 class _PatientPage extends State<PatientPage> {
-  Map info = {};
+  Map info = {"date_of_birth": "", "providers": [], "records": []};
 
   final TextEditingController _providerNameController = TextEditingController();
   final TextEditingController _providerIPController = TextEditingController();
@@ -88,7 +88,7 @@ class _PatientPage extends State<PatientPage> {
                     ),
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -162,7 +162,8 @@ class _PatientPage extends State<PatientPage> {
                                                             jsonRequest)
                                                         .then((response) => {
                                                               Navigator.pop(
-                                                                  context)
+                                                                  context),
+                                                              requestPatientInfo()
                                                             });
                                                   },
                                                   child: const Text(
@@ -174,8 +175,21 @@ class _PatientPage extends State<PatientPage> {
                               },
                             )
                           ],
+                        ),
+                        DataTable(
+                          border: TableBorder.all(),
+                          columns: const [
+                            DataColumn(label: Text('Name')),
+                            DataColumn(label: Text('IP Address')),
+                          ],
+                          rows:
+                              (info['providers'] as List<dynamic>).map((data) {
+                            return DataRow(cells: [
+                              DataCell(Text(data[0] ?? '')),
+                              DataCell(Text(data[1] ?? '')),
+                            ]);
+                          }).toList(),
                         )
-                        // Add list of providers here
                       ],
                     ),
                   )),

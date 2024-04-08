@@ -23,6 +23,8 @@ async fn main() {
         initialize_socket_thread(socket_rx, blockchain_tx).await;
     });
 
+    initialize_p2p().await;
+
     // Wait for both tasks to complete
     if let Err(err) = tokio::try_join!(blockchain_thread, socket_thread) {
         eprintln!("Error running tasks: {:?}", err);

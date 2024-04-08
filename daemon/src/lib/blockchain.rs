@@ -105,11 +105,11 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
         Ok(blocks) => {
             let mut data: Map<String, Value> = Map::default();
 
-            // For now, records are of shape: id, date, subject, provider_name
-            let mut records:Vec<(i64, String, String, String)> = vec![];
+            // For now, records are of shape: date, subject, provider_name
+            let mut records:Vec<(Value, Value, Value)> = vec![];
 
             // For now, providers are of shape: id, name, ip_address
-            let mut providers: Vec<(i64, String, String)> = vec![];
+            let mut providers: Vec<(Value, Value)> = vec![];
 
             // TODO: Process each block into either a record or provider, or adjust the providers given subsequent providers revoking
             for (_, encrypted_data) in blocks {
@@ -118,9 +118,14 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
                     "genesis" => {
                         data.insert("date_of_birth".to_string(), block_data.fields.get("date_of_birth").unwrap().clone());
                     },
+                    "add-provider" => {
+                        providers.push((block_data.fields.get("name").unwrap().clone(), block_data.fields.get("ip").unwrap().clone()));
+                    }
                     _ => {}
                 }
             }
+
+            data.insert("providers".to_string(), to_value(providers).unwrap());
 
             let patient_blocks_string = to_value(&data).unwrap();
             BlockchainResponse{ok: true, data: patient_blocks_string}

@@ -1,4 +1,4 @@
-use openssl::rsa::Rsa;
+use openssl::{pkey::PKey, rsa::Rsa};
 use rusqlite::{params, Connection, Result};
 use crate::blockchain::{Chain, Block};
 
@@ -7,7 +7,7 @@ const DB_STRING: &str = "ehr.sqlite";
 #[derive(Debug)]
 pub struct KeyPair {
     pub public_key: String,
-    private_key: String,
+    pub private_key: Vec<u8>,
 }
 
 pub fn insert_chain(chain: &Chain) -> Result<()> {
@@ -149,10 +149,13 @@ pub fn get_key_pair() -> Result<Option<KeyPair>>{
     // Check if the count is greater than 0
     if let Some(row) = rows.next()? {
         
+        let public_key = row.get(0).unwrap();
+        let private_key = row.get(1).unwrap();
+
         // Extract the key pair from the row
         let key_pair = KeyPair {
-            public_key: row.get(0)?,
-            private_key: row.get(1)?,
+            public_key,
+            private_key
         };
 
         // Return the key pair wrapped in Some
@@ -164,15 +167,21 @@ pub fn get_key_pair() -> Result<Option<KeyPair>>{
 }
 
 fn generate_key_pair() -> KeyPair {
+    // Generate RSA key pair
     let rsa = Rsa::generate(2048).unwrap();
 
-    // Extract public and private keys as strings
-    let public_key = rsa.public_key_to_pem().unwrap();
-    let private_key = rsa.private_key_to_pem().unwrap();
+    // Extract public key as PEM string
+    let public_key_pem = rsa.public_key_to_pem().unwrap();
+
+    // Extract private key as PKCS#8 PEM string
+    let private_key_der = {
+        let pkey = PKey::from_rsa(rsa).unwrap();
+        pkey.private_key_to_pkcs8().unwrap()
+    };
 
     KeyPair {
-        public_key: String::from_utf8(public_key).unwrap(),
-        private_key: String::from_utf8(private_key).unwrap(),
+        public_key: String::from_utf8(public_key_pem).unwrap(),
+        private_key: private_key_der,
     }
 }
 
@@ -226,7 +235,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         "CREATE TABLE IF NOT EXISTS user_key_pairs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             public_key TEXT,
-            private_key TEXT
+            private_key BLOB
          )",
         [],
     )?;
