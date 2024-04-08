@@ -56,12 +56,14 @@ pub async fn initialize_p2p() {
         swarm.behaviour_mut().gossipsub.subscribe(&topic).unwrap();
         let mut stdin = io::BufReader::new(io::stdin()).lines();
 
-        swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+        swarm.listen_on("/ip4/0.0.0.0/tcp/24195".parse().unwrap()).unwrap();
 
-        let addr = "192.168.2.128".to_string();
-        let remote: Multiaddr = addr.parse().unwrap();
+        let ip_address = "192.168.2.128";
+        let port = 24195;
+        let multiaddr_str = format!("/ip4/{}/tcp/{}", ip_address, port);
+        let remote = multiaddr_str.parse::<Multiaddr>().unwrap();
         swarm.dial(remote).unwrap();
-        println!("Dialed {addr}");
+        println!("Dialed {multiaddr_str}");
         
 
         // Kick it off
