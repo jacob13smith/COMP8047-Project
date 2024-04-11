@@ -68,18 +68,17 @@ pub fn get_next_chain_id() -> Result<i64> {
 
 pub fn insert_block(block: &Block) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
-    conn.execute("INSERT INTO blocks (chain_id, id, timestamp, data, previous_hash, hash, provider_key, shared_key_hash, data_hash) 
-                        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", 
-                        params![block.chain_id, block.id, block.timestamp, block.data, block.previous_hash, block.hash, block.provider_key, block.shared_key_hash, block.data_hash])?;
+    conn.execute("INSERT INTO blocks (chain_id, id, timestamp, data, previous_hash, hash, provider_key, data_hash) 
+                        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", 
+                        params![block.chain_id, block.id, block.timestamp, block.data, block.previous_hash, block.hash, block.provider_key, block.data_hash])?;
     Ok(())
 }
 
 pub fn fetch_last_block(chain_id: String) -> Result<Block> {
     let conn = Connection::open(DB_STRING)?;
 
-    // TODO: Remove unneeded fields here
     let query = format!(
-        "SELECT chain_id, id, timestamp, data, previous_hash, hash, provider_key, shared_key_hash, data_hash FROM blocks WHERE chain_id = ? AND id = (SELECT MAX(id) FROM blocks WHERE chain_id = ?)"
+        "SELECT chain_id, id, timestamp, data, previous_hash, hash, provider_key, data_hash FROM blocks WHERE chain_id = ? AND id = (SELECT MAX(id) FROM blocks WHERE chain_id = ?)"
     );
 
     let mut statement = conn.prepare(&query)?;
@@ -94,8 +93,7 @@ pub fn fetch_last_block(chain_id: String) -> Result<Block> {
             previous_hash: row.get(4)?,
             hash: row.get(5)?,
             provider_key: row.get(6)?,
-            shared_key_hash: row.get(7)?,
-            data_hash: row.get(8)?,
+            data_hash: row.get(7)?,
         })
     } else {
         Err(rusqlite::Error::QueryReturnedNoRows.into())
@@ -213,7 +211,6 @@ fn create_tables(conn: &Connection) -> Result<()> {
             previous_hash TEXT,
             hash TEXT,
             provider_key TEXT,
-            shared_key_hash TEXT,
             data_hash TEXT,
             FOREIGN KEY (chain_id) REFERENCES chains(id),
             PRIMARY KEY (chain_id, id)

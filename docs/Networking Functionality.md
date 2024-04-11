@@ -35,7 +35,6 @@ Event to send chain update(s) to specific remote peer.
             previous_hash: string,
             hash: string,
             provider_key: string,
-            shared_key_hash: string,
             data_hash: string
         }
     ]

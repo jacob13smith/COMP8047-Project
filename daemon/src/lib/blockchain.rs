@@ -1,5 +1,3 @@
-use std::f64::consts::E;
-
 use serde_json::{from_str, to_string, to_value, Map, Value};
 use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
@@ -13,7 +11,6 @@ use uuid::Uuid;
 use crate::database::{fetch_all_blocks, fetch_chains, fetch_last_block, get_key_pair, get_shared_key, insert_block, insert_chain, insert_shared_key};
 
 // Define the structure for a block
-// TODO: Remove the shared_key_hash since it changes between re-encryption and messes up the blockchain property
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub chain_id: String,
@@ -23,7 +20,6 @@ pub struct Block {
     pub previous_hash: String,
     pub hash: String,
     pub provider_key: String,
-    pub shared_key_hash: String,
     pub data_hash: String
 }
 
@@ -48,6 +44,7 @@ pub struct CreateChainParams {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlockchainRequest {
+    pub sender: String,
     pub action: String,
     pub parameters: Map<String, Value>
 }
@@ -58,30 +55,37 @@ pub struct BlockchainResponse {
     pub data: Value,
 }
 
-pub async fn initialize_blockchain_thread(mut receiver_from_socket: Receiver<String>, sender_to_socket: Sender<String>){
+pub async fn initialize_blockchain_thread(mut receiver: Receiver<String>, sender_to_socket: Sender<String>, sender_to_p2p: Sender<String>){
     // Receive messages from the socket thread
     loop {
-        if let Some(msg) = receiver_from_socket.recv().await {
+        if let Some(msg) = receiver.recv().await {
             let blockchain_request: BlockchainRequest = from_str(&msg).unwrap();
-            match blockchain_request.action.as_str() {
-                "get_chains" => {
-                    let response = get_chains();
-                    sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
-                },
-                "create_chain" => {
-                    // Need to get parameters from socket message here and use them
-                    let response = create_chain(blockchain_request.parameters);
-                    sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
-                },
-                "get_patient_info" => {
-                    let response = get_patient_info(blockchain_request.parameters.get("id").unwrap().as_str().unwrap().to_string());
-                    sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
-                },
-                "add_provider" => {
-                    let response = add_provider(blockchain_request.parameters);
-                    sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+            if blockchain_request.sender == "socket" {
+                match blockchain_request.action.as_str() {
+                    "get_chains" => {
+                        let response = get_chains();
+                        sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                    },
+                    "create_chain" => {
+                        // Need to get parameters from socket message here and use them
+                        let response = create_chain(blockchain_request.parameters);
+                        sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                    },
+                    "get_patient_info" => {
+                        let response = get_patient_info(blockchain_request.parameters.get("id").unwrap().as_str().unwrap().to_string());
+                        sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                    },
+                    "add_provider" => {
+                        let response = add_provider(blockchain_request.parameters);
+                        sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                    }
+                    _ => {}
                 }
-                _ => {}
+            } else if blockchain_request.sender == "p2p" {
+                // TODO: Add p2p request/responses
+                match blockchain_request.action.as_str() {
+                    _ => {}
+                }
             }
         }
     }
@@ -139,7 +143,6 @@ pub fn add_provider(parameters: Map<String, Value>) -> BlockchainResponse {
 
     let shared_key_vec = get_shared_key(chain_id.clone()).unwrap();
     let shared_key = shared_key_vec.as_slice();
-    let shared_key_hash = hash_shared_key(&shared_key);
     let my_key = get_key_pair().unwrap().expect("Expected KeyPair");
 
     let data = BlockData{action:"add-provider".to_string(), fields: parameters};
@@ -147,17 +150,19 @@ pub fn add_provider(parameters: Map<String, Value>) -> BlockchainResponse {
     let hashed_data = hash_data(&data);
 
     let last_block = get_last_block(chain_id.clone());
-    let add_provider_block = Block{
+    let mut add_provider_block = Block{
         chain_id: chain_id,
         id: last_block.id + 1,
         timestamp: Utc::now().timestamp(), 
         data: encrypted_data,
         previous_hash: last_block.hash,
-        hash: "0".to_string(), // TODO: Hash this properly
+        hash: "".to_string(),
         provider_key: my_key.public_key,
-        shared_key_hash: shared_key_hash,
         data_hash: hashed_data
     };
+
+    let hash = hash_block(&add_provider_block);
+    add_provider_block.hash = hash;
 
     let _ = insert_block(&add_provider_block);
 
@@ -167,7 +172,6 @@ pub fn add_provider(parameters: Map<String, Value>) -> BlockchainResponse {
 pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
     // Generate a new symmetric key for encryption
     let shared_key = generate_shared_key();
-    let shared_key_hash = hash_shared_key(&shared_key);
     let my_key = get_key_pair().unwrap().expect("Expected KeyPair");
 
     let first_name = parameters.get("first_name").unwrap().as_str().unwrap().to_string();
@@ -176,27 +180,23 @@ pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
 
     // Generate global id for new chain
     let id = Uuid::new_v4().to_string();
-
-    // TODO: figure out data formats for different types of transactions
     let data = BlockData{ action: "genesis".to_string(), fields: parameters };
     let encrypted_data = encrypt_data(&data, &shared_key);
     let hashed_data = hash_data(&data);
 
-    // dev
-    // let decrypted_data = decrypt_data(&encrypted_data, &shared_key);
-    // println!("Decrypted data: {}", to_string(&decrypted_data).unwrap());
-
-    let genesis_block = Block{ 
+    let mut genesis_block = Block{ 
         chain_id: id.clone(), 
         id: 0, 
         timestamp: Utc::now().timestamp(), 
         data: encrypted_data,
         previous_hash: 0.to_string(), 
-        hash: "0".to_string(), 
+        hash: "".to_string(), 
         provider_key: my_key.public_key,
-        shared_key_hash: shared_key_hash,
         data_hash: hashed_data
     };
+
+    let hash = hash_block(&genesis_block);
+    genesis_block.hash = hash;
 
     let new_chain = Chain { first_name: first_name, last_name: last_name, date_of_birth: date_of_birth, id: id.clone() };
     let _ = insert_chain(&new_chain);
@@ -217,7 +217,7 @@ pub fn revoke_access(chain_id: String, remote_ip: String) -> Result<()> {
 }
 
 // TODO: Add block to chain and propagate network
-pub fn add_block(chain_id: String, ) -> Result<()> {
+pub fn add_block(chain_id: String, block: Block) -> Result<()> {
     Ok(())
 }
 
@@ -234,10 +234,25 @@ fn generate_shared_key() -> [u8; 32] {
     key
 }
 
-fn hash_shared_key(key: &[u8]) -> String {
-    let mut sha256 = Sha256::new();
-    sha256.update(key);
-    let result = sha256.finish();
+fn hash_block(block: &Block) -> String {
+    let mut block_clone = block.clone();
+    block_clone.hash = "".to_string();
+    let serialized = format!(
+        "{}{}{}{}{}{}{}",
+        block.chain_id,
+        block.id,
+        block.timestamp,
+        block.data,
+        block.previous_hash,
+        block.provider_key,
+        block.data_hash
+    );
+
+    // Compute the SHA-256 hash
+    let mut hasher = Sha256::new();
+    hasher.update(serialized.as_bytes());
+    let result = hasher.finish();
+
     result.to_hex()
 }
 
@@ -250,7 +265,6 @@ fn hash_data(data: &BlockData) -> String {
 
 fn encrypt_data(data: &BlockData, key: &[u8]) -> String {
     let cipher = Cipher::aes_256_cbc();
-    // TODO: Figure out the IV for each block
     let iv = [0; 16];
     let ciphertext = encrypt(cipher, key, Some(&iv), to_string(data).unwrap().as_bytes()).unwrap();
     let hex_encoded_ciphertext = ciphertext.to_hex();
@@ -259,7 +273,6 @@ fn encrypt_data(data: &BlockData, key: &[u8]) -> String {
 
 fn decrypt_data(encrypted_data: &str, key: &[u8]) -> BlockData {
     let cipher = Cipher::aes_256_cbc();
-    // TODO: Figure out the IV for each block
     let iv = [0; 16];
     let ciphertext = encrypted_data.from_hex().unwrap();
     let decrypted_data = decrypt(cipher, key, Some(&iv), &ciphertext).expect("Decryption error");

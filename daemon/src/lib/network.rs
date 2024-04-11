@@ -1,11 +1,10 @@
 use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::Duration};
-
 use libp2p::{
     futures::StreamExt, gossipsub, identify, identity::Keypair, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp::Config, yamux, Multiaddr, SwarmBuilder
 };
-
-use tokio::{io, io::AsyncBufReadExt, select};
-use crate::{blockchain::Block, database::get_key_pair};
+use tokio::{io, select};
+use tokio::sync::mpsc::{Receiver, Sender};
+use crate::database::get_key_pair;
 
 #[derive(NetworkBehaviour)]
 struct P2PBehaviour {
@@ -14,7 +13,7 @@ struct P2PBehaviour {
 }
 
 
-pub async fn initialize_p2p() {
+pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String>, mut sender_to_blockchain: Sender<String>) {
     let keys = get_key_pair().unwrap();
 
     if let Some(key_pair) = keys {
@@ -35,7 +34,7 @@ pub async fn initialize_p2p() {
     
                 // Set a custom gossipsub configuration
                 let gossipsub_config = gossipsub::ConfigBuilder::default()
-                    .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
+                    .heartbeat_interval(Duration::from_secs(10))
                     .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
                     .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
                     .build()
@@ -57,13 +56,14 @@ pub async fn initialize_p2p() {
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
         
+        // TODO: Add all available topics
         let topic = gossipsub::IdentTopic::new("authorize_chain");
         
         swarm.behaviour_mut().gossipsub.subscribe(&topic).unwrap();
-        let mut stdin = io::BufReader::new(io::stdin()).lines();
 
         swarm.listen_on("/ip4/0.0.0.0/tcp/24195".parse().unwrap()).unwrap();
 
+        // TODO: Move this to where we would dial other nodes
         let ip_address = "192.168.2.128";
         let port = 24195;
         let multiaddr_str = format!("/ip4/{}/tcp/{}", ip_address, port);
@@ -71,17 +71,16 @@ pub async fn initialize_p2p() {
         swarm.dial(remote).unwrap();
         println!("Dialed {multiaddr_str}");
         
-
         // Kick it off
         loop {
             select! {
-                // TODO: Replace the stdin with messages coming from the blockchain thread
-                Ok(Some(line)) = stdin.next_line() => {
-                    if let Err(e) = swarm
-                        .behaviour_mut().gossipsub
-                        .publish(topic.clone(), line.as_bytes()) {
-                        println!("Publish error: {e:?}");
-                    }
+                Some(msg) = receiver_from_blockchain.recv() => {
+                    // TODO: Process message from blockchain thread
+                    // if let Err(e) = swarm
+                    //     .behaviour_mut().gossipsub
+                    //     .publish(topic.clone(), msg.as_bytes()) {
+                    //     println!("Publish error: {e:?}");
+                    // }
                 }
                 event = swarm.select_next_some() => match event {
                     SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),

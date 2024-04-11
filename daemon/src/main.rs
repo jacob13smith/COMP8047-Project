@@ -1,6 +1,6 @@
 use internal_lib::blockchain::initialize_blockchain_thread;
 use internal_lib::socket::initialize_socket_thread; 
-use internal_lib::{database, network::initialize_p2p };
+use internal_lib::{database, network::initialize_p2p_thread };
 use tokio::sync::mpsc::channel;
 
 #[tokio::main]
@@ -12,10 +12,11 @@ async fn main() {
     // Create channels for communication between threads
     let (socket_tx, socket_rx) = channel(10);
     let (blockchain_tx, blockchain_rx) = channel(10);
+    let (p2p_tx, p2p_rx) = channel(10);
 
     // Spawn blockchain task
     let blockchain_thread = tokio::spawn(async move {
-        initialize_blockchain_thread(blockchain_rx, socket_tx).await;
+        initialize_blockchain_thread(blockchain_rx, socket_tx, p2p_tx).await;
     });
 
     // Spawn socket task
@@ -23,10 +24,12 @@ async fn main() {
         initialize_socket_thread(socket_rx, blockchain_tx).await;
     });
 
-    initialize_p2p().await;
+    let p2p_thread = tokio::spawn(async move {
+        initialize_p2p_thread(p2p_rx, blockchain_tx).await;
+    });
 
-    // Wait for both tasks to complete
-    if let Err(err) = tokio::try_join!(blockchain_thread, socket_thread) {
+    // Wait for threads
+    if let Err(err) = tokio::try_join!(blockchain_thread, socket_thread, p2p_thread) {
         eprintln!("Error running tasks: {:?}", err);
     }
     

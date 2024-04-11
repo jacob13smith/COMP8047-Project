@@ -12,7 +12,6 @@ This requires at least creating a 'genesis' block for a user.  This is simple to
 
     The other fields are set as normal blocks would be
     - provider_public_key = user's public key
-    - shared_key_hash = hash of generated key
     - data hash = checksum of unencrypted data
 
 3. Save new block to local database. New user and chain created.
