@@ -62,7 +62,7 @@ async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_block
 }
 
 async fn request_blockchain(request_id: i64, action: String, parameters: &Map<String, Value>, receiver_from_blockchain: &mut Receiver<String>, sender_to_blockchain: Sender<String>) -> SocketResponse {
-    sender_to_blockchain.send(to_string(&BlockchainRequest{action: action, parameters: parameters.clone() }).unwrap()).await.unwrap();
+    sender_to_blockchain.send(to_string(&BlockchainRequest{action: action, parameters: parameters.clone(), sender: "socket".to_string() }).unwrap()).await.unwrap();
     let mut response = SocketResponse{id: request_id, data: "".to_string()};
 
     loop {
