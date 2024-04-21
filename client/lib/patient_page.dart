@@ -163,7 +163,11 @@ class _PatientPage extends State<PatientPage> {
                                                         .then((response) => {
                                                               Navigator.pop(
                                                                   context),
-                                                              requestPatientInfo()
+                                                              requestPatientInfo(),
+                                                              _providerNameController
+                                                                  .clear(),
+                                                              _providerIPController
+                                                                  .clear(),
                                                             });
                                                   },
                                                   child: const Text(
