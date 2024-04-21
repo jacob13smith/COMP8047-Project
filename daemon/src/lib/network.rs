@@ -43,11 +43,11 @@ pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String
 }
 
 async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, private_key: PKey<Private>){
-    println!("Waiting on peer-to-peer connections...");
     // Build SSL Acceptor with saved RSA key and no cert verification
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     acceptor.set_private_key(&private_key).unwrap();
     acceptor.set_verify(SslVerifyMode::NONE);
+    
     let acceptor = acceptor.build();
 
     let listener = TcpListener::bind("0.0.0.0:8047").unwrap();
@@ -65,7 +65,6 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, p
 }
 
 async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>, private_key: PKey<Private>) {
-    println!("Waiting on message from blockchain to network");
     loop {
         if let Some(msg) = receiver_from_blockchain.recv().await {
             println!("Recieved message from blockchain to network");
@@ -73,6 +72,7 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
             
             let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
             connector.set_private_key(&private_key).unwrap(); // Set the private key
+            connector.set_verify(SslVerifyMode::NONE);
             let connector = connector.build();
 
             // Connect to the server
