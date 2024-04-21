@@ -31,7 +31,7 @@ pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>
         Err(_) => todo!(),
     };
 
-    // Spawn tasks to handle read operations concurrently
+    // Spawn tasks to handle read operations concurrently (to allow push updates from blockchain later)
     tokio::spawn(handle_read_from_client(stream, receiver_from_blockchain, sender_to_blockchain));
 }
 
