@@ -28,8 +28,8 @@ pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String
     if let Some(key_pair) = keys {
         let rsa_pkey_bytes = key_pair.private_key.clone();
         let private_key = PKey::private_key_from_pkcs8(&rsa_pkey_bytes).unwrap();
-        
-        tokio::spawn(handle_request_from_blockchain(receiver_from_blockchain, sender_to_blockchain.clone(), private_key.clone()));
+
+        let _ = tokio::spawn(handle_request_from_blockchain(receiver_from_blockchain, sender_to_blockchain.clone(), private_key.clone())).await.unwrap();
 
         // Build SSL Acceptor with saved RSA key and no cert verification
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
@@ -37,7 +37,7 @@ pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String
         acceptor.set_verify(SslVerifyMode::NONE);
         let acceptor = acceptor.build();
 
-        let listener = TcpListener::bind("127.0.0.1:8047").unwrap();
+        let listener = TcpListener::bind("0.0.0.0:8047").unwrap();
 
         println!("Waiting on peer-to-peer connections...");
         for stream in listener.incoming() {
@@ -56,14 +56,16 @@ pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String
 
 async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>, private_key: PKey<Private>) {
     loop {
+        println!("Waiting on message from blockchain to network");
         if let Some(msg) = receiver_from_blockchain.recv().await {
-            let blockchain_request: BlockchainRequest = from_str(&msg).unwrap();
+            println!("Recieved message from blockchain to network");
+            let blockchain_request: P2PRequest = from_str(&msg).unwrap();
             
             let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
             connector.set_private_key(&private_key).unwrap(); // Set the private key
             let connector = connector.build();
 
-                        // Connect to the server
+            // Connect to the server
             let stream = TcpStream::connect("192.168.2.128:8047").unwrap();
             let mut stream = connector.connect("localhost", stream).unwrap();
 
