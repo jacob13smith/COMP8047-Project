@@ -47,6 +47,7 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, p
     let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
     acceptor.set_private_key(&private_key).unwrap();
     acceptor.set_verify(SslVerifyMode::NONE);
+    let _ = acceptor.set_cipher_list("TLS_AES_256_GCM_SHA384");
     
     let acceptor = acceptor.build();
 
@@ -73,6 +74,8 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
             let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
             connector.set_private_key(&private_key).unwrap(); // Set the private key
             connector.set_verify(SslVerifyMode::NONE);
+            let _ = connector.set_cipher_list("TLS_AES_256_GCM_SHA384");
+
             let connector = connector.build();
 
             // Connect to the server
