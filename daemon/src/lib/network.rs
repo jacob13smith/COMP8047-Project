@@ -1,6 +1,6 @@
 use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, sync::Arc, time::Duration};
 use openssl::pkey::PKey;
-use rustls::{pki_types::{CertificateDer, PrivateKeyDer}, ServerConfig};
+use rustls::{pki_types::{CertificateDer, PrivateKeyDer}, RootCertStore, ServerConfig};
 use serde_json::{from_str, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::{io::{self, BufReader}, select};
@@ -56,9 +56,15 @@ pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String
 async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, key: PrivateKeyDer<'static>, cert: CertificateDer<'static>){
     let config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(vec![cert], key);
+        .with_single_cert(vec![cert], key).unwrap();
 
     let listener = TcpListener::bind("0.0.0.0:8047").unwrap();
+
+    loop {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
+        conn.complete_io(&mut stream).unwrap();
+    }
 
 }
 
@@ -69,6 +75,17 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
             println!("Recieved message from blockchain to network");
             let blockchain_request: P2PRequest = from_str(&msg).unwrap();
 
+            let root_store = RootCertStore::empty();
+            let mut config = rustls::ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_client_auth_cert(vec![cert.clone()], key.clone_key()).unwrap();
+
+            let server_name = "localhost".try_into().unwrap();
+            let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+            let mut sock = TcpStream::connect("102.168.2.128:8047").unwrap();
+            let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+
+            tls.write_all(b"Hi there!").unwrap();
         }
     }
 }
