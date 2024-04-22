@@ -49,7 +49,7 @@ pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String
 
 async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, identity: Identity){
     
-    let acceptor = TlsAcceptor::new(identity).unwrap();
+    let acceptor = TlsAcceptor::builder(identity).build().unwrap();
     let listener = TcpListener::bind("0.0.0.0:8047").unwrap();
 
     for stream in listener.incoming() {
@@ -77,10 +77,13 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
             println!("Recieved message from blockchain to network");
             let blockchain_request: P2PRequest = from_str(&msg).unwrap();
 
-            let stream = TcpStream::connect("192.168.2.128").unwrap();
+            let stream = TcpStream::connect("192.168.2.128:8047").unwrap();
 
             let connector = TlsConnector::builder()
                 .identity(identity.clone())
+                .danger_accept_invalid_certs(true)
+                .danger_accept_invalid_hostnames(true)
+                .disable_built_in_roots(true)
                 .build().unwrap();
 
             let mut stream = connector.connect("localhost", stream).unwrap();
