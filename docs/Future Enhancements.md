@@ -22,3 +22,5 @@ This document is a collection of ideas for enhancements to the system, if it wer
 - Healthcare provider discovery system
 
 - Remote access request by new provider
+
+- Building network for CA trust
