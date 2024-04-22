@@ -174,7 +174,7 @@ fn generate_key_pair() -> KeyPair {
     // Extract private key as PKCS#8 PEM string
     let private_key_der = {
         let pkey = PKey::from_rsa(rsa).unwrap();
-        pkey.private_key_to_pem_pkcs8().unwrap()
+        pkey.private_key_to_pkcs8().unwrap()
     };
 
     KeyPair {
