@@ -1,4 +1,4 @@
-use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, sync::Arc, time::Duration};
+use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, str::from_utf8, sync::Arc, time::Duration};
 use openssl::pkey::PKey;
 use rcgen::{generate_simple_self_signed, CertifiedKey};
 use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, crypto::aws_lc_rs::sign::any_supported_type, pki_types::{CertificateDer, PrivateKeyDer}, server::{danger::{ClientCertVerified, ClientCertVerifier}, ResolvesServerCert}, sign::SigningKey, RootCertStore, ServerConfig};
@@ -129,7 +129,7 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, k
         conn.complete_io(&mut stream).unwrap();
         let mut buf = [0; 64];
         let len = conn.reader().read(&mut buf).unwrap();
-        println!("Received message from client: {:?}", &buf[..len]);
+        println!("Received message from client: {:?}", from_utf8(&buf[..len]));
     }
 
 }
