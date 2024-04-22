@@ -127,6 +127,9 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, k
         let (mut stream, _) = listener.accept().unwrap();
         let mut conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
         conn.complete_io(&mut stream).unwrap();
+        let mut buf = [0; 64];
+        let len = conn.reader().read(&mut buf).unwrap();
+        println!("Received message from client: {:?}", &buf[..len]);
     }
 
 }
