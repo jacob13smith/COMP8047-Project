@@ -109,28 +109,19 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
         let (mut stream, _) = listener.accept().unwrap();
         let mut conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
         conn.complete_io(&mut stream).unwrap();
-        let mut buf = [0; 65536];
-        loop {
-            if let Ok(io_state) = conn.process_new_packets(){
-                if io_state.plaintext_bytes_to_read() > 0 {
-                    let len =  conn.reader().read(&mut buf).unwrap();
-                    let network_request_str = from_utf8(&buf[0..len]).unwrap();
-                    let request: P2PRequest = from_str(network_request_str).unwrap();
-                    
-                    match request.action.as_str() {
-                        "add-provider" => {
-                            add_provider_from_remote(request);
-                            let _ = conn.writer().write_all(to_string(&P2PResponse{ok: true, data: Value::Null}).unwrap().as_bytes());
-                        },
-                        _ => {}
-                    }
-                }
-
-            }
+        let mut buf = [0; 32896];
+        let len =  conn.reader().read(&mut buf).unwrap();
+        let network_request_str = from_utf8(&buf[0..len]).unwrap();
+        let request: P2PRequest = from_str(network_request_str).unwrap();
+        
+        match request.action.as_str() {
+            "add-provider" => {
+                add_provider_from_remote(request);
+                let _ = conn.writer().write_all(to_string(&P2PResponse{ok: true, data: Value::Null}).unwrap().as_bytes());
+            },
+            _ => {}
         }
-            
     }
-    
 }
 
 async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>) {
@@ -169,9 +160,9 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
         .unwrap();
     
         let server_name = "localhost".try_into().unwrap();
-        let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-        let mut sock = TcpStream::connect(format!("{}:8047", ip)).unwrap();
-        let mut tls = rustls::StreamOwned::new(conn, sock);
+        let conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+        let sock = TcpStream::connect(format!("{}:8047", ip)).unwrap();
+        let tls = rustls::StreamOwned::new(conn, sock);
         Some(tls)
     } else {
         None
@@ -195,7 +186,7 @@ fn add_remote_provider(ip: String, chain_id: String) {
 
     let _ = tls.write_all(serialized_request.as_bytes());
 
-    let mut buf = [0; 65536];
+    let mut buf = [0; 32896];
     tls.read(&mut buf).unwrap();
 }
 
