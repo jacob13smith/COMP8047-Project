@@ -24,3 +24,5 @@ This document is a collection of ideas for enhancements to the system, if it wer
 - Remote access request by new provider
 
 - Building network for CA trust
+
+- Identify nodes by some public key rather than IP address

@@ -1,15 +1,15 @@
-use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, str::from_utf8, sync::Arc, time::Duration};
+use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, os::linux::net, str::from_utf8, sync::Arc, time::Duration};
 use openssl::pkey::PKey;
 use rcgen::{generate_simple_self_signed, CertifiedKey};
-use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, crypto::aws_lc_rs::sign::any_supported_type, pki_types::{CertificateDer, PrivateKeyDer}, server::{danger::{ClientCertVerified, ClientCertVerifier}, ResolvesServerCert}, sign::SigningKey, RootCertStore, ServerConfig};
+use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, crypto::aws_lc_rs::sign::any_supported_type, pki_types::{CertificateDer, PrivateKeyDer}, server::{danger::{ClientCertVerified, ClientCertVerifier}, ResolvesServerCert}, sign::SigningKey, RootCertStore, ServerConfig, Stream};
 use serde_json::{from_str, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::{io::{self, BufReader}, select};
 use tokio::sync::mpsc::{Receiver, Sender};
 use rsa::{traits::SignatureScheme, RsaPrivateKey};
-use crate::{blockchain::BlockchainRequest, database::get_key_pair};
+use crate::{blockchain::BlockchainRequest, database::{get_key_pair, get_shared_key}};
 
-const DEFAULT_PORT: i32 = 24195;
+const DEFAULT_PORT: i32 = 8047;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct P2PRequest {
@@ -44,11 +44,11 @@ pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String
         let sender_clone = sender_to_blockchain.clone();
 
         let blockchain_listener = tokio::spawn(async move {
-            handle_request_from_blockchain(receiver_from_blockchain, sender_clone, private_key, cert_der).await;
+            handle_request_from_blockchain(receiver_from_blockchain, sender_clone).await;
         });
 
         let network_listener = tokio::spawn(async move {
-            handle_request_from_network(sender_to_blockchain, private_key_clone, cert_clone).await;
+            handle_request_from_network(sender_to_blockchain).await;
         });
     }
 
@@ -104,10 +104,10 @@ impl ServerCertVerifier for AllowAnyCertVerifier {
     }
 }
 
+// Need to allow any cert to get around certificate authorities for now
 impl ResolvesServerCert for AllowAnyCertVerifier {
     fn resolve(&self, client_hello: rustls::server::ClientHello) -> Option<Arc<rustls::sign::CertifiedKey>> {
         // Create a dummy server certificate and private key
-        
         let cert_key = generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
         let cert_der = cert_key.cert.der().to_owned();
     
@@ -116,43 +116,88 @@ impl ResolvesServerCert for AllowAnyCertVerifier {
     }
 }
 
-async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>, key: PrivateKeyDer<'static>, cert: CertificateDer<'static>){
+async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
     let config = ServerConfig::builder()
         .with_no_client_auth()
         .with_cert_resolver(Arc::new(AllowAnyCertVerifier));
 
-    let listener = TcpListener::bind("0.0.0.0:8047").unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", DEFAULT_PORT)).unwrap();
 
     loop {
         let (mut stream, _) = listener.accept().unwrap();
         let mut conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
         conn.complete_io(&mut stream).unwrap();
-        let mut buf = [0; 64];
+        let mut buf = [0; 32896];
         let len = conn.reader().read(&mut buf).unwrap();
-        println!("Received message from client: {:?}", from_utf8(&buf[..len]));
-    }
+        
+        let network_request_str = from_utf8(&buf).unwrap();
+        let request: P2PRequest = from_str(network_request_str).unwrap();
 
+        println!("{}", request.action);
+        println!("{}", request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string());
+        println!("{}", request.parameters.get("shared_key").unwrap().as_str().unwrap().to_string())
+    }
 }
 
-async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>, key: PrivateKeyDer<'static>, cert: CertificateDer<'static>) {
+async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>) {
 
     loop {
         if let Some(msg) = receiver_from_blockchain.recv().await {
-            println!("Recieved message from blockchain to network");
             let blockchain_request: P2PRequest = from_str(&msg).unwrap();
 
-            let mut root_store = RootCertStore::empty();
-            let _ = root_store.add(cert.clone());
-            let mut config = rustls::ClientConfig::builder()
-                .dangerous().with_custom_certificate_verifier(Arc::new(AllowAnyCertVerifier))
-                .with_no_client_auth();
-
-            let server_name = "localhost".try_into().unwrap();
-            let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-            let mut sock = TcpStream::connect("192.168.2.128:8047").unwrap();
-            let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-
-            tls.write_all(b"Hi there!").unwrap();
+            match blockchain_request.action.as_str() {
+                "add-provider" => add_provider( blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
+                _ => {}
+            }
         }
     }
+}
+
+fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConnection, std::net::TcpStream>>{
+    let keys = get_key_pair().unwrap();
+    if let Some(key_pair) = keys {
+        let rsa_pkey_bytes = key_pair.private_key.clone();
+        let ssl_pkey = PKey::private_key_from_pkcs8(&rsa_pkey_bytes).unwrap();
+        let pem = String::from_utf8(ssl_pkey.private_key_to_pem_pkcs8().unwrap()).unwrap();
+        let mut cursor = Cursor::new(pem);
+        
+        let private_key = rustls_pemfile::private_key(&mut cursor).unwrap().unwrap();
+        let private_key_clone = private_key.clone_key();
+        
+        let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let cert = cert.cert;
+        let cert_der = cert.der().to_owned();
+        let cert_clone = cert_der.clone();
+
+        let config = rustls::ClientConfig::builder()
+        .dangerous().with_custom_certificate_verifier(Arc::new(AllowAnyCertVerifier))
+        .with_client_auth_cert(vec![cert_clone], private_key_clone)
+        .unwrap();
+    
+        let server_name = "localhost".try_into().unwrap();
+        let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
+        let mut sock = TcpStream::connect("192.168.2.128:8047").unwrap();
+        let mut tls = rustls::StreamOwned::new(conn, sock);
+        Some(tls)
+    } else {
+        None
+    }
+}
+
+fn add_provider(ip: String, chain_id: String) {
+    let mut tls = connect_to_host(ip).unwrap();
+    let shared_key = get_shared_key(chain_id.clone()).unwrap();
+
+    let mut parameters = Map::new();
+    parameters.insert("chain_id".to_string(), to_value(chain_id).unwrap());
+    parameters.insert("shared_key".to_string(), to_value(shared_key).unwrap());
+
+    let network_request = P2PRequest{
+        action: "add-provider".to_string(),
+        parameters
+    };
+
+    let serialized_request = to_string(&network_request).unwrap();
+
+    let _ = tls.write_all(serialized_request.as_bytes());
 }
