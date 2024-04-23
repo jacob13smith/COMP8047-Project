@@ -127,8 +127,8 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
         let (mut stream, _) = listener.accept().unwrap();
         let mut conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
         conn.complete_io(&mut stream).unwrap();
-        let mut buf = [0; 32896];
-        let len = conn.reader().read(&mut buf).unwrap();
+        let mut buf: Vec<u8> = vec![];
+        let len = conn.reader().read_to_end(&mut buf).unwrap();
         
         let network_request_str = from_utf8(&buf[0..len]).unwrap();
         let request: P2PRequest = from_str(network_request_str).unwrap();
