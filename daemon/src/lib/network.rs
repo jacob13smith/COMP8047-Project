@@ -24,33 +24,15 @@ pub struct P2PResponse {
 }
 
 pub async fn initialize_p2p_thread(mut receiver_from_blockchain: Receiver<String>, mut sender_to_blockchain: Sender<String>) {
-    
-    let keys = get_key_pair().unwrap();
-    
-    if let Some(key_pair) = keys {
-        let rsa_pkey_bytes = key_pair.private_key.clone();
-        let ssl_pkey = PKey::private_key_from_pkcs8(&rsa_pkey_bytes).unwrap();
-        let pem = String::from_utf8(ssl_pkey.private_key_to_pem_pkcs8().unwrap()).unwrap();
-        let mut cursor = Cursor::new(pem);
-        
-        let private_key = rustls_pemfile::private_key(&mut cursor).unwrap().unwrap();
-        let private_key_clone = private_key.clone_key();
-        
-        let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-        let cert = cert.cert;
-        let cert_der = cert.der().to_owned();
-        let cert_clone = cert_der.clone();
-        
-        let sender_clone = sender_to_blockchain.clone();
 
-        let blockchain_listener = tokio::spawn(async move {
-            handle_request_from_blockchain(receiver_from_blockchain, sender_clone).await;
-        });
+    let sender_clone = sender_to_blockchain.clone();
+    let blockchain_listener = tokio::spawn(async move {
+        handle_request_from_blockchain(receiver_from_blockchain, sender_clone).await;
+    });
 
-        let network_listener = tokio::spawn(async move {
-            handle_request_from_network(sender_to_blockchain).await;
-        });
-    }
+    let network_listener = tokio::spawn(async move {
+        handle_request_from_network(sender_to_blockchain).await;
+    });
 
 }
 
@@ -129,11 +111,12 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
         conn.complete_io(&mut stream).unwrap();
         let mut buf = [0; 65536];
         loop {
-            match conn.reader().read(&mut buf){
-                Ok(len) => {
+            if let Ok(io_state) = conn.process_new_packets(){
+                if io_state.plaintext_bytes_to_read() > 0 {
+                    let len =  conn.reader().read(&mut buf).unwrap();
                     let network_request_str = from_utf8(&buf[0..len]).unwrap();
                     let request: P2PRequest = from_str(network_request_str).unwrap();
-            
+                    
                     match request.action.as_str() {
                         "add-provider" => {
                             add_provider_from_remote(request);
@@ -141,12 +124,13 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
                         },
                         _ => {}
                     }
-                },
-                Err(_) => {}
+                }
+
             }
-            
         }
+            
     }
+    
 }
 
 async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>) {
