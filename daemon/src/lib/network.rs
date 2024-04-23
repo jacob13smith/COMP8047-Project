@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{io::{self, BufReader}, select};
 use tokio::sync::mpsc::{Receiver, Sender};
 use rsa::{traits::SignatureScheme, RsaPrivateKey};
-use crate::{blockchain::BlockchainRequest, database::{get_key_pair, get_shared_key}};
+use crate::{blockchain::BlockchainRequest, database::{get_key_pair, get_shared_key, insert_shared_key}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -133,17 +133,14 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
         let network_request_str = from_utf8(&buf[0..len]).unwrap();
         let request: P2PRequest = from_str(network_request_str).unwrap();
 
-        println!("{}", request.action);
-        println!("{}", request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string());
+        match request.action.as_str() {
+            "add-provider" => {
+                add_provider_from_remote(request);
+                let _ = conn.writer().write_all(to_string(&P2PResponse{ok: true, data: Value::Null}).unwrap().as_bytes());
+            },
+            _ => {}
+        }
 
-        let shared_key_value = request.parameters.get("shared_key").unwrap();
-
-        // Convert the shared_key_value to a Vec<u8>
-        let shared_key = match shared_key_value {
-            Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8),
-            _ => panic!("shared_key field is not an array"),
-        };
-        println!("{:?}", shared_key);
     }
 }
 
@@ -154,7 +151,7 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
             let blockchain_request: P2PRequest = from_str(&msg).unwrap();
 
             match blockchain_request.action.as_str() {
-                "add-provider" => add_provider( blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
+                "add-provider" => add_remote_provider( blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
                 _ => {}
             }
         }
@@ -192,7 +189,7 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
     }
 }
 
-fn add_provider(ip: String, chain_id: String) {
+fn add_remote_provider(ip: String, chain_id: String) {
     let mut tls = connect_to_host(ip).unwrap();
     let shared_key = get_shared_key(chain_id.clone()).unwrap();
 
@@ -208,4 +205,20 @@ fn add_provider(ip: String, chain_id: String) {
     let serialized_request = to_string(&network_request).unwrap();
 
     let _ = tls.write_all(serialized_request.as_bytes());
+
+    let mut buf: Vec<u8> = vec![];
+    tls.read_to_end(&mut buf).unwrap();
+}
+
+fn add_provider_from_remote(request: P2PRequest){
+    let chain_id = request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
+    let shared_key_value = request.parameters.get("shared_key").unwrap();
+
+    // Convert the shared_key_value to a Vec<u8>
+    let shared_key:Vec<u8> = match shared_key_value {
+        Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8).collect(),
+        _ => panic!("shared_key field is not an array"),
+    };
+
+    insert_shared_key(&shared_key, chain_id).unwrap();
 }
