@@ -127,7 +127,7 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
         let (mut stream, _) = listener.accept().unwrap();
         let mut conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
         conn.complete_io(&mut stream).unwrap();
-        let mut buf: Vec<u8> = vec![];
+        let mut buf = [0; 65536];
         loop {
             match conn.reader().read(&mut buf){
                 Ok(len) => {
@@ -211,8 +211,8 @@ fn add_remote_provider(ip: String, chain_id: String) {
 
     let _ = tls.write_all(serialized_request.as_bytes());
 
-    let mut buf: Vec<u8> = vec![];
-    tls.read_to_end(&mut buf).unwrap();
+    let mut buf = [0; 65536];
+    tls.read(&mut buf).unwrap();
 }
 
 fn add_provider_from_remote(request: P2PRequest){
