@@ -130,12 +130,20 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
         let mut buf = [0; 32896];
         let len = conn.reader().read(&mut buf).unwrap();
         
-        let network_request_str = from_utf8(&buf).unwrap();
+        let network_request_str = from_utf8(&buf[0..len]).unwrap();
         let request: P2PRequest = from_str(network_request_str).unwrap();
 
         println!("{}", request.action);
         println!("{}", request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string());
-        println!("{}", request.parameters.get("shared_key").unwrap().as_str().unwrap().to_string())
+
+        let shared_key_value = request.parameters.get("shared_key").unwrap();
+
+        // Convert the shared_key_value to a Vec<u8>
+        let shared_key = match shared_key_value {
+            Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8),
+            _ => panic!("shared_key field is not an array"),
+        };
+        println!("{:?}", shared_key);
     }
 }
 
@@ -176,7 +184,7 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
     
         let server_name = "localhost".try_into().unwrap();
         let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-        let mut sock = TcpStream::connect("192.168.2.128:8047").unwrap();
+        let mut sock = TcpStream::connect(format!("{}:8047", ip)).unwrap();
         let mut tls = rustls::StreamOwned::new(conn, sock);
         Some(tls)
     } else {
