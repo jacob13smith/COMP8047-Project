@@ -29,7 +29,6 @@ class _PatientPage extends State<PatientPage> {
     };
     dynamic patientInfo = await widget.socketApi.sendRequest(jsonRequest);
 
-    print("Patient info: $patientInfo");
     setState(() {
       info = patientInfo;
     });
@@ -203,20 +202,119 @@ class _PatientPage extends State<PatientPage> {
               const SizedBox(height: 16),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(16.0),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.black), // Add border
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Records',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 24)),
-                      // Add list of record entries here
-                    ],
-                  ),
-                ),
+                    padding: const EdgeInsets.all(16.0),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.black), // Add border
+                    ),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Records',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 24)),
+                              IconButton(
+                                  icon: const Icon(Icons.add),
+                                  onPressed: () {
+                                    showModalBottomSheet(
+                                        context: context,
+                                        builder: (BuildContext context) {
+                                          return SingleChildScrollView(
+                                              child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      vertical: 10.0,
+                                                      horizontal: 20.0),
+                                                  child: Column(children: [
+                                                    const Text(
+                                                      'Add Record',
+                                                      style: TextStyle(
+                                                        fontSize: 24.0,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(
+                                                        height: 20.0),
+                                                    TextField(
+                                                      controller:
+                                                          _providerNameController,
+                                                      decoration:
+                                                          const InputDecoration(
+                                                        labelText: 'Subject',
+                                                        border:
+                                                            OutlineInputBorder(),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(
+                                                        height: 20.0),
+                                                    TextField(
+                                                      controller:
+                                                          _providerIPController,
+                                                      decoration:
+                                                          const InputDecoration(
+                                                        labelText: 'Notes',
+                                                        border:
+                                                            OutlineInputBorder(),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(
+                                                        height: 20.0),
+                                                    ElevatedButton(
+                                                      onPressed: () async {
+                                                        Map<String, dynamic>
+                                                            jsonRequest = {
+                                                          'action':
+                                                              'add_record',
+                                                          'parameters': {
+                                                            'chain_id':
+                                                                widget.id,
+                                                            'text': "text here"
+                                                          }
+                                                        };
+                                                        await widget.socketApi
+                                                            .sendRequest(
+                                                                jsonRequest)
+                                                            .then(
+                                                                (re1sponse) => {
+                                                                      Navigator.pop(
+                                                                          context),
+                                                                      requestPatientInfo(),
+                                                                      _providerNameController
+                                                                          .clear(),
+                                                                      _providerIPController
+                                                                          .clear(),
+                                                                    });
+                                                      },
+                                                      child: const Text(
+                                                          'Add Record'),
+                                                    )
+                                                  ])));
+                                        });
+                                  })
+                              // Add list of record entries here
+                            ],
+                          ),
+                          DataTable(
+                            border: TableBorder.all(),
+                            columns: const [
+                              DataColumn(label: Text('Date')),
+                              DataColumn(label: Text('Subject')),
+                              DataColumn(label: Text('Provider')),
+                            ],
+                            rows:
+                                (info['records'] as List<dynamic>).map((data) {
+                              return DataRow(cells: [
+                                DataCell(Text(data[0] ?? '')),
+                                DataCell(Text(data[1] ?? '')),
+                                DataCell(Text(data[2] ?? '')),
+                              ]);
+                            }).toList(),
+                          )
+                        ])),
               ),
             ],
           ),

@@ -186,8 +186,8 @@ fn add_remote_provider(ip: String, chain_id: String) {
 
     let _ = tls.write_all(serialized_request.as_bytes());
 
-    //let mut buf = [0; 32896];
-    //tls.read(&mut buf).unwrap();
+    // let mut buf = [0; 32896];
+    // tls.read(&mut buf).unwrap();
 }
 
 fn add_provider_from_remote(request: P2PRequest){

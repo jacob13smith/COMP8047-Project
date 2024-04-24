@@ -79,6 +79,9 @@ pub async fn initialize_blockchain_thread(mut receiver: Receiver<String>, sender
                     "add_provider" => {
                         let response = add_provider(blockchain_request.parameters, &sender_to_p2p).await;
                         sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                    },
+                    "add_record" => {
+                        // Add record logic here
                     }
                     _ => {}
                 }
@@ -131,6 +134,7 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
             }
 
             data.insert("providers".to_string(), to_value(providers).unwrap());
+            data.insert("records".to_string(), to_value(records).unwrap());
 
             let patient_blocks_string = to_value(&data).unwrap();
             BlockchainResponse{ok: true, data: patient_blocks_string}
