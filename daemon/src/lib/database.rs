@@ -33,14 +33,15 @@ pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
     chains
 }
 
-pub fn fetch_all_blocks(id: String) -> Result<Vec<(i64, String)>> {
+pub fn fetch_all_blocks(id: String) -> Result<Vec<(i64, i64, String)>> {
     let conn = Connection::open(DB_STRING)?;
 
-    let mut statement = conn.prepare("SELECT timestamp, data FROM blocks WHERE chain_id = ? ORDER BY timestamp ASC").unwrap();
+    let mut statement = conn.prepare("SELECT timestamp, id, data FROM blocks WHERE chain_id = ? ORDER BY timestamp ASC").unwrap();
     let blocks = statement.query_map(params![id], |row| {
         Ok((
             row.get::<usize, i64>(0)?,
-            row.get::<usize, String>(1)?,
+            row.get::<usize, i64>(1)?,
+            row.get::<usize, String>(2)?,
         ))
     })?;
 
@@ -51,6 +52,22 @@ pub fn fetch_all_blocks(id: String) -> Result<Vec<(i64, String)>> {
     }
 
     Ok(result)
+}
+
+// Returns a tuple (timestamp, data)
+pub fn fetch_record(chain_id: String, block_id: i64) -> Result<(i64, String)> {
+    let conn = Connection::open(DB_STRING)?;
+
+    let mut statement = conn.prepare("SELECT timestamp, data FROM blocks WHERE chain_id = ? AND id = ?").unwrap();
+
+    let record = statement.query_row(params![chain_id, block_id], |row| {
+        Ok((
+            row.get::<usize, i64>(0)?,
+            row.get::<usize, String>(1)?,
+        ))
+    })?;
+    
+    Ok(record)
 }
 
 pub fn get_next_chain_id() -> Result<i64> {

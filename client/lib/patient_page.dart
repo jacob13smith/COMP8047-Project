@@ -1,5 +1,7 @@
 import 'package:client/socket_api.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:client/record_page.dart';
 
 class PatientPage extends StatefulWidget {
   const PatientPage(
@@ -21,6 +23,9 @@ class _PatientPage extends State<PatientPage> {
 
   final TextEditingController _providerNameController = TextEditingController();
   final TextEditingController _providerIPController = TextEditingController();
+
+  final TextEditingController _subjectController = TextEditingController();
+  final TextEditingController _textController = TextEditingController();
 
   void requestPatientInfo() async {
     Map<String, dynamic> jsonRequest = {
@@ -241,7 +246,7 @@ class _PatientPage extends State<PatientPage> {
                                                         height: 20.0),
                                                     TextField(
                                                       controller:
-                                                          _providerNameController,
+                                                          _subjectController,
                                                       decoration:
                                                           const InputDecoration(
                                                         labelText: 'Subject',
@@ -253,7 +258,7 @@ class _PatientPage extends State<PatientPage> {
                                                         height: 20.0),
                                                     TextField(
                                                       controller:
-                                                          _providerIPController,
+                                                          _textController,
                                                       decoration:
                                                           const InputDecoration(
                                                         labelText: 'Notes',
@@ -272,7 +277,12 @@ class _PatientPage extends State<PatientPage> {
                                                           'parameters': {
                                                             'chain_id':
                                                                 widget.id,
-                                                            'text': "text here"
+                                                            "subject":
+                                                                _subjectController
+                                                                    .text,
+                                                            'text':
+                                                                _textController
+                                                                    .text
                                                           }
                                                         };
                                                         await widget.socketApi
@@ -302,16 +312,30 @@ class _PatientPage extends State<PatientPage> {
                             border: TableBorder.all(),
                             columns: const [
                               DataColumn(label: Text('Date')),
-                              DataColumn(label: Text('Subject')),
-                              DataColumn(label: Text('Provider')),
+                              DataColumn(label: Text('Subject'))
                             ],
+                            showCheckboxColumn: false,
                             rows:
                                 (info['records'] as List<dynamic>).map((data) {
-                              return DataRow(cells: [
-                                DataCell(Text(data[0] ?? '')),
-                                DataCell(Text(data[1] ?? '')),
-                                DataCell(Text(data[2] ?? '')),
-                              ]);
+                              DateTime dateTime =
+                                  DateTime.fromMillisecondsSinceEpoch(
+                                      data[0] * 1000);
+                              return DataRow(
+                                  cells: [
+                                    DataCell(Text(
+                                        DateFormat.yMMMMd().format(dateTime))),
+                                    DataCell(Text(data[1] ?? '')),
+                                  ],
+                                  onSelectChanged: (_) {
+                                    Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => RecordPage(
+                                                  socketApi: widget.socketApi,
+                                                  id: widget.id,
+                                                  blockId: data[2],
+                                                )));
+                                  });
                             }).toList(),
                           )
                         ])),

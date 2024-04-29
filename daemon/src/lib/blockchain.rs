@@ -8,7 +8,7 @@ use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
-use crate::database::{fetch_all_blocks, fetch_chains, fetch_last_block, get_key_pair, get_shared_key, insert_block, insert_chain, insert_shared_key};
+use crate::database::{fetch_all_blocks, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_shared_key};
 use crate::network::P2PRequest;
 
 // Define the structure for a block
@@ -76,12 +76,17 @@ pub async fn initialize_blockchain_thread(mut receiver: Receiver<String>, sender
                         let response = get_patient_info(blockchain_request.parameters.get("id").unwrap().as_str().unwrap().to_string());
                         sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
                     },
+                    "get_record" => {
+                        let response = get_record(blockchain_request.parameters.get("id").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("block_id").unwrap().as_i64().unwrap()).await;
+                        sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                    }
                     "add_provider" => {
                         let response = add_provider(blockchain_request.parameters, &sender_to_p2p).await;
                         sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
                     },
                     "add_record" => {
-                        // Add record logic here
+                        let response = add_record(blockchain_request.parameters, &sender_to_p2p).await;
+                        sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
                     }
                     _ => {}
                 }
@@ -113,14 +118,14 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
         Ok(blocks) => {
             let mut data: Map<String, Value> = Map::default();
 
-            // For now, records are of shape: date, subject, provider_name
+            // For now, records are of shape: date, subject, record_id
             let mut records:Vec<(Value, Value, Value)> = vec![];
 
             // For now, providers are of shape: id, name, ip_address
             let mut providers: Vec<(Value, Value)> = vec![];
             
             // TODO: Process each block into either a record or provider, or adjust the providers given subsequent providers revoking
-            for (_, encrypted_data) in blocks {
+            for (timestamp, block_id, encrypted_data) in blocks {
                 let block_data = decrypt_data(&encrypted_data, shared_key);
                 match block_data.action.as_str() {
                     "genesis" => {
@@ -128,6 +133,12 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
                     },
                     "add-provider" => {
                         providers.push((block_data.fields.get("name").unwrap().clone(), block_data.fields.get("ip").unwrap().clone()));
+                    }
+                    "add-record" => {
+                        records.push((to_value(timestamp).unwrap(), block_data.fields.get("subject").unwrap().clone(), to_value(block_id).unwrap()));
+                    }
+                    "remove_provider" => {
+
                     }
                     _ => {}
                 }
@@ -141,6 +152,52 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
         },
         Err(_) => {BlockchainResponse{ok: false, data: Value::Null}}
     }
+}
+
+pub async fn get_record(chain_id: String, block_id: i64) -> BlockchainResponse {
+    let shared_key_vec = get_shared_key(chain_id.clone()).unwrap();
+    let shared_key = shared_key_vec.as_slice();
+
+    match fetch_record(chain_id, block_id) {
+        Ok(record) => {
+            let mut block_data = decrypt_data(&record.1, shared_key);
+            block_data.fields.insert("timestamp".to_string(), to_value(record.0).unwrap());
+            return BlockchainResponse{ok: true, data: to_value(block_data.fields).unwrap()}
+        },
+        Err(_) => {return BlockchainResponse{ok: false, data: Value::Null};}
+    }
+}
+
+pub async fn add_record(parameters: Map<String, Value>, sender_to_p2p: &Sender<String>) -> BlockchainResponse {
+    let chain_id = parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
+    let shared_key_vec = get_shared_key(chain_id.clone()).unwrap();
+    let shared_key = shared_key_vec.as_slice();
+    let my_key = get_key_pair().unwrap().expect("Expected KeyPair");
+
+    let data = BlockData{action:"add-record".to_string(), fields: parameters.clone()};
+    let encrypted_data = encrypt_data(&data, &shared_key);
+    let hashed_data = hash_data(&data);
+
+    let last_block = get_last_block(chain_id.clone());
+    let mut add_record_block = Block{
+        chain_id: chain_id,
+        id: last_block.id + 1,
+        timestamp: Utc::now().timestamp(), 
+        data: encrypted_data,
+        previous_hash: last_block.hash,
+        hash: "".to_string(),
+        provider_key: my_key.public_key,
+        data_hash: hashed_data
+    };
+
+    let hash = hash_block(&add_record_block);
+    add_record_block.hash = hash;
+
+    let _ = insert_block(&add_record_block);
+    
+    let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "add-record".to_string(), parameters}).unwrap()).await;
+
+    BlockchainResponse{ok: true, data: Value::Null}
 }
 
 pub async fn add_provider(mut parameters: Map<String, Value>, sender_to_p2p: &Sender<String>) -> BlockchainResponse {
@@ -215,11 +272,6 @@ pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
 
 // TODO: Revoke access for a given chain from given IP address
 pub fn revoke_provider(chain_id: String, remote_ip: String) -> Result<()> {
-    Ok(())
-}
-
-// TODO: Add block to chain and propagate network
-pub fn add_block(chain_id: String, block: Block) -> Result<()> {
     Ok(())
 }
 
