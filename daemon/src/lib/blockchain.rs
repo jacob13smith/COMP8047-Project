@@ -88,6 +88,10 @@ pub async fn initialize_blockchain_thread(mut receiver: Receiver<String>, sender
                         let response = add_record(blockchain_request.parameters, &sender_to_p2p).await;
                         sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
                     }
+                    "remove_provider" => {
+                        let response = remove_provider(blockchain_request.parameters, &sender_to_p2p).await;
+                        sender_to_socket.send(to_string(&response).unwrap()).await.unwrap();
+                    }
                     _ => {}
                 }
             } else if blockchain_request.sender == "p2p" {
@@ -121,10 +125,9 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
             // For now, records are of shape: date, subject, record_id
             let mut records:Vec<(Value, Value, Value)> = vec![];
 
-            // For now, providers are of shape: id, name, ip_address
+            // For now, providers are of shape: name, ip_address
             let mut providers: Vec<(Value, Value)> = vec![];
             
-            // TODO: Process each block into either a record or provider, or adjust the providers given subsequent providers revoking
             for (timestamp, block_id, encrypted_data) in blocks {
                 let block_data = decrypt_data(&encrypted_data, shared_key);
                 match block_data.action.as_str() {
@@ -137,8 +140,8 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
                     "add-record" => {
                         records.push((to_value(timestamp).unwrap(), block_data.fields.get("subject").unwrap().clone(), to_value(block_id).unwrap()));
                     }
-                    "remove_provider" => {
-
+                    "remove-provider" => {
+                        providers.retain(|(_, ip)| ip.as_str().unwrap().to_string() != block_data.fields.get("ip").unwrap().as_str().unwrap().to_string())
                     }
                     _ => {}
                 }
@@ -233,6 +236,42 @@ pub async fn add_provider(mut parameters: Map<String, Value>, sender_to_p2p: &Se
     BlockchainResponse{ok: true, data: Value::Null}
 }
 
+// TODO: Fill this in
+pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sender<String>) -> BlockchainResponse {
+    let chain_id = parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
+
+    let shared_key_vec = get_shared_key(chain_id.clone()).unwrap();
+    let shared_key = shared_key_vec.as_slice();
+    let my_key = get_key_pair().unwrap().expect("Expected KeyPair");
+
+    let data = BlockData{action:"remove-provider".to_string(), fields: parameters.clone()};
+    let encrypted_data = encrypt_data(&data, &shared_key);
+    let hashed_data = hash_data(&data);
+
+    let last_block = get_last_block(chain_id.clone());
+    let mut remove_provider_block = Block{
+        chain_id: chain_id,
+        id: last_block.id + 1,
+        timestamp: Utc::now().timestamp(), 
+        data: encrypted_data,
+        previous_hash: last_block.hash,
+        hash: "".to_string(),
+        provider_key: my_key.public_key,
+        data_hash: hashed_data
+    };
+
+    let hash = hash_block(&remove_provider_block);
+    remove_provider_block.hash = hash;
+
+    let _ = insert_block(&remove_provider_block);
+    let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "add-provider".to_string(), parameters}).unwrap()).await;
+
+    BlockchainResponse{
+        ok: true,
+        data: Value::Null,
+    }
+}
+
 pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
     // Generate a new symmetric key for encryption
     let shared_key = generate_shared_key();
@@ -268,11 +307,6 @@ pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
     let _ = insert_shared_key(&shared_key, id);
     
     BlockchainResponse{ok: true, data: Value::Null}
-}
-
-// TODO: Revoke access for a given chain from given IP address
-pub fn revoke_provider(chain_id: String, remote_ip: String) -> Result<()> {
-    Ok(())
 }
 
 pub fn get_last_block(chain_id: String) -> Block {

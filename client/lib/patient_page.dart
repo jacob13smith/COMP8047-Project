@@ -186,16 +186,114 @@ class _PatientPage extends State<PatientPage> {
                         ),
                         DataTable(
                           border: TableBorder.all(),
+                          showCheckboxColumn: false,
                           columns: const [
                             DataColumn(label: Text('Name')),
                             DataColumn(label: Text('IP Address')),
                           ],
                           rows:
                               (info['providers'] as List<dynamic>).map((data) {
-                            return DataRow(cells: [
-                              DataCell(Text(data[0] ?? '')),
-                              DataCell(Text(data[1] ?? '')),
-                            ]);
+                            return DataRow(
+                                cells: [
+                                  DataCell(Text(data[0] ?? '')),
+                                  DataCell(Text(data[1] ?? '')),
+                                ],
+                                onSelectChanged: (_) {
+                                  showModalBottomSheet(
+                                      context: context,
+                                      builder: (BuildContext context) {
+                                        return SingleChildScrollView(
+                                            child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        vertical: 10.0,
+                                                        horizontal: 20.0),
+                                                child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      const Text(
+                                                        'Provider',
+                                                        style: TextStyle(
+                                                          fontSize: 24.0,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(
+                                                        height: 20.0,
+                                                      ),
+                                                      const Text(
+                                                        'Name',
+                                                        style: TextStyle(
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .bold),
+                                                      ),
+                                                      Text(
+                                                        data[0],
+                                                      ),
+                                                      const SizedBox(
+                                                          height: 20.0),
+                                                      const Text(
+                                                        'IP Address',
+                                                        style: TextStyle(
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .bold),
+                                                      ),
+                                                      Text(
+                                                        data[1],
+                                                      ),
+                                                      const SizedBox(
+                                                          height: 20.0),
+                                                      ElevatedButton(
+                                                        style: ButtonStyle(
+                                                            backgroundColor:
+                                                                MaterialStateProperty
+                                                                    .all<Color>(
+                                                                        Colors
+                                                                            .red),
+                                                            foregroundColor:
+                                                                MaterialStateProperty
+                                                                    .all<Color>(
+                                                                        Colors
+                                                                            .black)),
+                                                        onPressed: () async {
+                                                          Map<String, dynamic>
+                                                              jsonRequest = {
+                                                            'action':
+                                                                'remove_provider',
+                                                            'parameters': {
+                                                              'chain_id':
+                                                                  widget.id,
+                                                              "ip": data[1]
+                                                            }
+                                                          };
+                                                          await widget.socketApi
+                                                              .sendRequest(
+                                                                  jsonRequest)
+                                                              .then(
+                                                                  (response) =>
+                                                                      {
+                                                                        Navigator.pop(
+                                                                            context),
+                                                                        requestPatientInfo(),
+                                                                        _providerNameController
+                                                                            .clear(),
+                                                                        _providerIPController
+                                                                            .clear(),
+                                                                      });
+                                                        },
+                                                        child: const Text(
+                                                            'Revoke Access'),
+                                                      )
+                                                    ])));
+                                      });
+                                });
                           }).toList(),
                         )
                       ],
@@ -289,7 +387,7 @@ class _PatientPage extends State<PatientPage> {
                                                             .sendRequest(
                                                                 jsonRequest)
                                                             .then(
-                                                                (re1sponse) => {
+                                                                (response) => {
                                                                       Navigator.pop(
                                                                           context),
                                                                       requestPatientInfo(),
