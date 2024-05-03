@@ -26,3 +26,5 @@ This document is a collection of ideas for enhancements to the system, if it wer
 - Building network for CA trust
 
 - Identify nodes by some public key rather than IP address
+
+- Make it so same data isn't always encrypted to the same output

@@ -33,7 +33,7 @@ pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
     chains
 }
 
-pub fn fetch_all_blocks(id: String) -> Result<Vec<(i64, i64, String)>> {
+pub fn fetch_all_transactions(id: String) -> Result<Vec<(i64, i64, String)>> {
     let conn = Connection::open(DB_STRING)?;
 
     let mut statement = conn.prepare("SELECT timestamp, id, data FROM blocks WHERE chain_id = ? ORDER BY timestamp ASC").unwrap();
@@ -49,6 +49,43 @@ pub fn fetch_all_blocks(id: String) -> Result<Vec<(i64, i64, String)>> {
 
     for block in blocks {
         result.push(block?);
+    }
+
+    Ok(result)
+}
+
+pub fn fetch_all_blocks(id: String) -> Result<Vec<Block>> {
+    let conn = Connection::open(DB_STRING)?;
+
+    let mut statement = conn.prepare("SELECT chain_id, id, timestamp, data, previous_hash, hash, provider_key, data_hash FROM blocks WHERE chain_id = ? ORDER BY timestamp ASC").unwrap();
+    let block_tuples = statement.query_map(params![id], |row| {
+        Ok((
+            row.get::<usize, String>(0)?,
+            row.get::<usize, i64>(1)?,
+            row.get::<usize, i64>(2)?,
+            row.get::<usize, String>(3)?,
+            row.get::<usize, String>(4)?,
+            row.get::<usize, String>(5)?,
+            row.get::<usize, String>(6)?,
+            row.get::<usize, String>(7)?,
+        ))
+    })?;
+
+    let mut result = Vec::new();
+
+    for block_tuple_result in block_tuples {
+        let block_tuple = block_tuple_result.unwrap();
+        let block = Block{
+            chain_id: block_tuple.0,
+            id: block_tuple.1,
+            timestamp: block_tuple.2,
+            data: block_tuple.3,
+            previous_hash: block_tuple.4,
+            hash: block_tuple.5, 
+            provider_key: block_tuple.6,
+            data_hash: block_tuple.7
+        };
+        result.push(block);
     }
 
     Ok(result)
@@ -91,6 +128,13 @@ pub fn insert_block(block: &Block) -> Result<()> {
     Ok(())
 }
 
+pub fn update_block(block: &Block) -> Result<()> {
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("UPDATE blocks SET (data) = ? WHERE chain_id = ? and id = ?", 
+                        params![block.data, block.chain_id, block.id])?;
+    Ok(())
+}
+
 pub fn fetch_last_block(chain_id: String) -> Result<Block> {
     let conn = Connection::open(DB_STRING)?;
 
@@ -119,6 +163,16 @@ pub fn fetch_last_block(chain_id: String) -> Result<Block> {
 
 pub fn insert_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
+    conn.execute(
+        "INSERT INTO shared_keys (chain_id, value, active) VALUES (?, ?, ?)",
+        params![chain_id, &shared_key, true],
+    )?;
+    Ok(())
+}
+
+pub fn insert_new_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("UPDATE shared_keys SET active = 0 WHERE chain_id = ?", params![chain_id])?;
     conn.execute(
         "INSERT INTO shared_keys (chain_id, value, active) VALUES (?, ?, ?)",
         params![chain_id, &shared_key, true],
@@ -221,7 +275,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS blocks (
-            chain_id INTEGER,
+            chain_id TEXT,
             id INTEGER,
             timestamp INTEGER,
             data TEXT NOT NULL,
@@ -238,7 +292,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS shared_keys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chain_id INTEGER,
+            chain_id TEXT,
             value BLOB,
             active INTEGER
          )",

@@ -3,12 +3,11 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
 use openssl::sha::Sha256;
 use openssl::symm::{Cipher, encrypt, decrypt};
-use rusqlite::Result;
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
-use crate::database::{fetch_all_blocks, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_shared_key};
+use crate::database::{fetch_all_blocks, fetch_all_transactions, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_new_shared_key, insert_shared_key, update_block};
 use crate::network::P2PRequest;
 
 // Define the structure for a block
@@ -118,7 +117,7 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
     let shared_key_vec = get_shared_key(id.clone()).unwrap();
     let shared_key = shared_key_vec.as_slice();
     
-    match fetch_all_blocks(id){
+    match fetch_all_transactions(id){
         Ok(blocks) => {
             let mut data: Map<String, Value> = Map::default();
 
@@ -236,7 +235,6 @@ pub async fn add_provider(mut parameters: Map<String, Value>, sender_to_p2p: &Se
     BlockchainResponse{ok: true, data: Value::Null}
 }
 
-// TODO: Fill this in
 pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sender<String>) -> BlockchainResponse {
     let chain_id = parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
 
@@ -250,7 +248,7 @@ pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sen
 
     let last_block = get_last_block(chain_id.clone());
     let mut remove_provider_block = Block{
-        chain_id: chain_id,
+        chain_id: chain_id.clone(),
         id: last_block.id + 1,
         timestamp: Utc::now().timestamp(), 
         data: encrypted_data,
@@ -264,7 +262,22 @@ pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sen
     remove_provider_block.hash = hash;
 
     let _ = insert_block(&remove_provider_block);
-    let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "add-provider".to_string(), parameters}).unwrap()).await;
+
+    // Fetch all blocks, and one-by-one, re-encrypt the data, check that the block hash is the same, and save to database
+    let new_key = generate_shared_key();
+    let _ = insert_new_shared_key(&new_key, chain_id.clone());
+    
+    let blocks = fetch_all_blocks(chain_id).unwrap();
+    for block in blocks {
+        println!("Reencrypting block...");
+        let new_block_option = reencrypt_block(&block, shared_key, &new_key);
+        if let Some(new_block) = new_block_option {
+            let _ = update_block(&new_block);
+            println!("Reencrypt success!")
+        }
+    }
+
+    // let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "remove-provider".to_string(), parameters}).unwrap()).await;
 
     BlockchainResponse{
         ok: true,
@@ -322,15 +335,40 @@ fn generate_shared_key() -> [u8; 32] {
     key
 }
 
+
+pub fn reencrypt_block(block: &Block, old_key: &[u8], new_key: &[u8]) -> Option<Block> {
+    let existing_hash = &block.hash;
+    let encrypted_data = &block.data;
+    let decrypted_data = decrypt_data(encrypted_data.as_str(), old_key);
+    let reencrypted_data = encrypt_data(&decrypted_data, new_key);
+
+    let new_block = Block { 
+        chain_id: block.chain_id.clone(), 
+        id: block.id.clone(), 
+        timestamp: block.timestamp.clone(), 
+        data: reencrypted_data, 
+        previous_hash: block.previous_hash.clone(), 
+        hash: block.hash.clone(), 
+        provider_key: block.provider_key.clone(), 
+        data_hash: block.data_hash.clone()
+    };
+
+    let new_hash = hash_block(&new_block);
+    if new_hash != *existing_hash {
+        return None
+    }
+
+    Some(new_block)
+}
+
 fn hash_block(block: &Block) -> String {
     let mut block_clone = block.clone();
     block_clone.hash = "".to_string();
     let serialized = format!(
-        "{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}",
         block.chain_id,
         block.id,
         block.timestamp,
-        block.data,
         block.previous_hash,
         block.provider_key,
         block.data_hash
