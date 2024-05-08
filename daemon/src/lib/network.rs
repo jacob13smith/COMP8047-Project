@@ -107,18 +107,27 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
 
     loop {
         let (mut stream, _) = listener.accept().unwrap();
+        println!("Incoming connection...");
         let mut conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
-        conn.complete_io(&mut stream).unwrap();
+        let mut tls = rustls::StreamOwned::new(conn, stream);
+        // conn.complete_io(&mut stream).unwrap();
         let mut buf = [0; 32896];
-        let len =  conn.reader().read(&mut buf).unwrap();
+
+        // let len =  conn.reader().read(&mut buf).unwrap();
+
+        let len = tls.read(&mut buf).unwrap();
+
+        println!("request received: {}", len);
         let network_request_str = from_utf8(&buf[0..len]).unwrap();
         let request: P2PRequest = from_str(network_request_str).unwrap();
         
         match request.action.as_str() {
             "add-provider" => {
-                add_provider_from_remote(request);
-                let _ = conn.writer().write_all(to_string(&P2PResponse{ok: true, data: Value::Null}).unwrap().as_bytes());
+                add_provider_from_remote(request);                let _ = tls.write_all(to_string(&P2PResponse{ok: true, data: Value::Null}).unwrap().as_bytes());
             },
+            "update-chain" => {
+                println!("UPDATE CHAIN YES");
+            }
             _ => {}
         }
     }
