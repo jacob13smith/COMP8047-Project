@@ -28,3 +28,5 @@ This document is a collection of ideas for enhancements to the system, if it wer
 - Identify nodes by some public key rather than IP address
 
 - Make it so same data isn't always encrypted to the same output
+
+- More complex data saved in records

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{io::{self, BufReader}, select};
 use tokio::sync::mpsc::{Receiver, Sender};
 use rsa::{traits::SignatureScheme, RsaPrivateKey};
-use crate::{blockchain::BlockchainRequest, database::{get_key_pair, get_shared_key, insert_shared_key}};
+use crate::{blockchain::BlockchainRequest, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -179,24 +179,26 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
 }
 
 fn add_remote_provider(ip: String, chain_id: String) {
-    let mut tls = connect_to_host(ip).unwrap();
+    let mut tls = connect_to_host(ip.clone()).unwrap();
     let shared_key = get_shared_key(chain_id.clone()).unwrap();
 
     let mut parameters = Map::new();
-    parameters.insert("chain_id".to_string(), to_value(chain_id).unwrap());
+    parameters.insert("chain_id".to_string(), to_value(chain_id.clone()).unwrap());
     parameters.insert("shared_key".to_string(), to_value(shared_key).unwrap());
 
-    let network_request = P2PRequest{
+    let share_key_message = P2PRequest{
         action: "add-provider".to_string(),
         parameters
     };
 
-    let serialized_request = to_string(&network_request).unwrap();
+    let serialized_request = to_string(&share_key_message).unwrap();
 
     let _ = tls.write_all(serialized_request.as_bytes());
+    tls.flush().unwrap();
 
-    // let mut buf = [0; 32896];
-    // tls.read(&mut buf).unwrap();
+    let mut buf = [0; 32896];
+    tls.read(&mut buf).unwrap();
+    println!("Response: {}", from_utf8(&buf).unwrap());
 }
 
 fn add_provider_from_remote(request: P2PRequest){
