@@ -2,10 +2,10 @@ use std::{io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, str::from_ut
 use openssl::pkey::PKey;
 use rcgen::generate_simple_self_signed;
 use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, crypto::aws_lc_rs::sign::any_supported_type, pki_types::{CertificateDer, PrivateKeyDer}, server::ResolvesServerCert, ServerConfig};
-use serde_json::{from_str, to_string, to_value, Map, Value};
+use serde_json::{from_str, from_value, to_string, to_value, to_vec, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key};
+use crate::{blockchain::Block, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -189,27 +189,23 @@ fn add_remote_provider(ip: String, chain_id: String) {
     let mut parameters = Map::new();
     parameters.insert("chain_id".to_string(), to_value(chain_id.clone()).unwrap());
     parameters.insert("shared_key".to_string(), to_value(shared_key).unwrap());
-
     let share_key_message = P2PRequest{
         action: "add-provider".to_string(),
         parameters
     };
-
     let response = request_remote(ip.clone(), share_key_message);
-    println!("Response: {}", to_string(&response).unwrap());
 
-    // Semd all the blocks
+    // Send all the blocks
     let mut parameters = Map::new();
     let blocks = fetch_all_blocks(chain_id).unwrap();
     let json_blocks = to_value(blocks).unwrap();
     parameters.insert("blocks".to_string(), json_blocks);
     let update_chain_message = P2PRequest{
-        action: "update-block".to_string(),
+        action: "update-chain".to_string(),
         parameters
     };
 
     let response = request_remote(ip.clone(), update_chain_message);
-    println!("Response: {}", to_string(&response).unwrap());
 }
 
 
@@ -240,10 +236,14 @@ fn add_provider_from_remote(request: P2PRequest){
         Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8).collect(),
         _ => panic!("shared_key field is not an array"),
     };
-
     insert_shared_key(&shared_key, chain_id).unwrap();
 }
 
 fn update_chain_from_remote(request: P2PRequest) {
-    println!("Update chain with given blocks...");
+    let json_blocks_value = request.parameters.get("blocks").unwrap();
+    let blocks: Vec<Block> = from_value(json_blocks_value.clone()).unwrap();
+
+    for block in blocks {
+        println!("{:?}", block);
+    }
 }
