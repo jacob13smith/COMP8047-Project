@@ -121,18 +121,8 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
 
         let network_request_str = from_utf8(&buf[0..len]).unwrap();
         let request: P2PRequest = from_str(network_request_str).unwrap();
-        
-        match request.action.as_str() {
-            "add-provider" => {
-                add_provider_from_remote(request);                
-                let _ = tls.write_all(to_string(&P2PResponse{ok: true, data: Value::Null}).unwrap().as_bytes());
-            },
-            "update-chain" => {
-                update_chain_from_remote(request);
-                println!("UPDATE CHAIN YES");
-            }
-            _ => {}
-        }
+        let response = handle_request(request);
+        let _ = tls.write_all(to_string(&response).unwrap().as_bytes());
     }
 }
 
@@ -225,6 +215,20 @@ fn add_remote_provider(ip: String, chain_id: String) {
 
 
 // --------- REMOTE REQUEST HANDLERS ------------ //
+
+fn handle_request(request: P2PRequest) -> P2PResponse {
+    match request.action.as_str() {
+        "add-provider" => {
+            add_provider_from_remote(request);
+        },
+        "update-chain" => {
+            update_chain_from_remote(request);
+            println!("UPDATE CHAIN YES");
+        }
+        _ => {}
+    }
+    P2PResponse{ ok: true, data: Value::Null }
+}
 
 
 fn add_provider_from_remote(request: P2PRequest){
