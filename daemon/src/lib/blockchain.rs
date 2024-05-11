@@ -364,7 +364,7 @@ pub fn add_block(block: Block) {
     let chain_id = block.chain_id.clone();
     let block_id = block.id.clone();
 
-    let last_block_res = fetch_last_block(chain_id);
+    let last_block_res = fetch_last_block(chain_id.clone());
 
     match last_block_res {
         Ok(last_block) => {
@@ -374,6 +374,14 @@ pub fn add_block(block: Block) {
         },
         Err(_) => {
             if block_id == 0 {
+                let shared_key = get_shared_key(chain_id.clone()).unwrap();
+                let decrypted_data = decrypt_data(&block.data.clone(), &shared_key);
+                let first_name = decrypted_data.fields.get("first_name").unwrap().as_str().unwrap().to_string();
+                let last_name = decrypted_data.fields.get("last_name").unwrap().as_str().unwrap().to_string();;
+                let date_of_birth = decrypted_data.fields.get("date_of_brith").unwrap().as_str().unwrap().to_string();;
+                let id = chain_id.clone();
+                let new_chain = Chain{ id: id, first_name: first_name, last_name: last_name, date_of_birth: date_of_birth };
+                let _ = insert_chain(&new_chain);
                 let _ = insert_block(&block);
             }
         }
