@@ -5,7 +5,7 @@ use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, Serve
 use serde_json::{from_str, from_value, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{blockchain::{add_block, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
+use crate::{blockchain::{add_block, get_active_providers, get_patient_info, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -134,6 +134,7 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
 
             match blockchain_request.action.as_str() {
                 "add-provider" => add_remote_provider( blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
+                "add-record" => add_record(blockchain_request.parameters),
                 _ => {}
             }
         }
@@ -195,6 +196,18 @@ fn add_remote_provider(ip: String, chain_id: String) {
     let response = request_remote(ip.clone(), share_key_message);
 
     // Send all the blocks
+    send_chain_update(chain_id, ip);
+}
+
+fn add_record(parameters: Map<String, Value>) {
+    let providers = get_active_providers(parameters.get("chain_id").unwrap().as_str().unwrap().to_string());
+
+    for provider in providers {
+        send_chain_update(parameters.get("chain_id").unwrap().as_str().unwrap().to_string(), provider.1);
+    }
+}
+
+fn send_chain_update(chain_id: String, ip: String) {
     let mut parameters = Map::new();
     let blocks = fetch_all_blocks(chain_id).unwrap();
     let json_blocks = to_value(blocks).unwrap();

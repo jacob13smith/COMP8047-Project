@@ -156,6 +156,33 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
     }
 }
 
+pub fn get_active_providers(id: String) -> Vec<(String, String)>{
+    let shared_key_vec = get_shared_key(id.clone()).unwrap();
+    let shared_key = shared_key_vec.as_slice();
+    
+    match fetch_all_transactions(id){
+        Ok(blocks) => {
+            // For now, providers are of shape: name, ip_address
+            let mut providers: Vec<(String, String)> = vec![];
+            
+            for (timestamp, block_id, encrypted_data) in blocks {
+                let block_data = decrypt_data(&encrypted_data, shared_key);
+                match block_data.action.as_str() {
+                    "add-provider" => {
+                        providers.push((block_data.fields.get("name").unwrap().clone().as_str().unwrap().to_string(), block_data.fields.get("ip").unwrap().clone().as_str().unwrap().to_string()));
+                    }
+                    "remove-provider" => {
+                        providers.retain(|(_, ip)| *ip != block_data.fields.get("ip").unwrap().as_str().unwrap().to_string())
+                    }
+                    _ => {}
+                }
+            }
+            providers
+        },
+        Err(_) => {vec![]}
+    }
+}
+
 pub async fn get_record(chain_id: String, block_id: i64) -> BlockchainResponse {
     let shared_key_vec = get_shared_key(chain_id.clone()).unwrap();
     let shared_key = shared_key_vec.as_slice();
