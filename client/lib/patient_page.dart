@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:client/socket_api.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -43,6 +45,9 @@ class _PatientPage extends State<PatientPage> {
   void initState() {
     super.initState();
     requestPatientInfo();
+    Timer.periodic(const Duration(seconds: 3), (timer) {
+      requestPatientInfo();
+    });
   }
 
   @override

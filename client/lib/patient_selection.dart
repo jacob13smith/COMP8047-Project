@@ -28,7 +28,7 @@ class _PatientSelectionPage extends State<PatientSelectionPage> {
     _dateController = TextEditingController();
     connect().then((_) => {
           requestChains(),
-          Timer.periodic(const Duration(seconds: 2), (timer) {
+          Timer.periodic(const Duration(seconds: 3), (timer) {
             requestChains();
           })
         });
