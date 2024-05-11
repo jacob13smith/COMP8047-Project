@@ -378,7 +378,7 @@ pub fn add_block(block: Block) {
                 let decrypted_data = decrypt_data(&block.data.clone(), &shared_key);
                 let first_name = decrypted_data.fields.get("first_name").unwrap().as_str().unwrap().to_string();
                 let last_name = decrypted_data.fields.get("last_name").unwrap().as_str().unwrap().to_string();;
-                let date_of_birth = decrypted_data.fields.get("date_of_brith").unwrap().as_str().unwrap().to_string();;
+                let date_of_birth = decrypted_data.fields.get("date_of_birth").unwrap().as_str().unwrap().to_string();;
                 let id = chain_id.clone();
                 let new_chain = Chain{ id: id, first_name: first_name, last_name: last_name, date_of_birth: date_of_birth };
                 let _ = insert_chain(&new_chain);

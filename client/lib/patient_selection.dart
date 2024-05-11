@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:client/patient_page.dart';
 import 'package:client/socket_api.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +26,12 @@ class _PatientSelectionPage extends State<PatientSelectionPage> {
   void initState() {
     super.initState();
     _dateController = TextEditingController();
-    connect().then((_) => requestChains());
+    connect().then((_) => {
+          requestChains(),
+          Timer.periodic(const Duration(seconds: 2), (timer) {
+            requestChains();
+          })
+        });
   }
 
   Future<void> connect() async {
