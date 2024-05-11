@@ -335,7 +335,6 @@ fn generate_shared_key() -> [u8; 32] {
     key
 }
 
-
 pub fn reencrypt_block(block: &Block, old_key: &[u8], new_key: &[u8]) -> Option<Block> {
     let existing_hash = &block.hash;
     let encrypted_data = &block.data;
@@ -360,6 +359,27 @@ pub fn reencrypt_block(block: &Block, old_key: &[u8], new_key: &[u8]) -> Option<
 
     Some(new_block)
 }
+
+pub fn add_block(block: Block) {
+    let chain_id = block.chain_id.clone();
+    let block_id = block.id.clone();
+
+    let last_block_res = fetch_last_block(chain_id);
+
+    match last_block_res {
+        Ok(last_block) => {
+            if block_id == last_block.id + 1 {
+                let _ = insert_block(&block);
+            }
+        },
+        Err(_) => {
+            if block_id == 0 {
+                let _ = insert_block(&block);
+            }
+        }
+    }
+}
+
 
 fn hash_block(block: &Block) -> String {
     let mut block_clone = block.clone();

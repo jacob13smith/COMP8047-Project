@@ -2,10 +2,10 @@ use std::{io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, str::from_ut
 use openssl::pkey::PKey;
 use rcgen::generate_simple_self_signed;
 use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, crypto::aws_lc_rs::sign::any_supported_type, pki_types::{CertificateDer, PrivateKeyDer}, server::ResolvesServerCert, ServerConfig};
-use serde_json::{from_str, from_value, to_string, to_value, to_vec, Map, Value};
+use serde_json::{from_str, from_value, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{blockchain::Block, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
+use crate::{blockchain::{add_block, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -180,7 +180,6 @@ fn request_remote(ip: String, request: P2PRequest) -> P2PResponse {
 
     let mut buf = [0; 32896];
     tls.read(&mut buf).unwrap();
-    println!("Response: {}", from_utf8(&buf).unwrap());
     P2PResponse{ ok: true, data: Value::Null }
 }
 
@@ -208,24 +207,20 @@ fn add_remote_provider(ip: String, chain_id: String) {
     let response = request_remote(ip.clone(), update_chain_message);
 }
 
-
-
 // --------- REMOTE REQUEST HANDLERS ------------ //
 
 fn handle_request(request: P2PRequest) -> P2PResponse {
     match request.action.as_str() {
         "add-provider" => {
-            add_provider_from_remote(request);
+            add_provider_from_remote(request)
         },
         "update-chain" => {
-            update_chain_from_remote(request);
-            println!("UPDATE CHAIN YES");
+            update_chain_from_remote(request)
         }
         _ => {}
     }
-    P2PResponse{ ok: true, data: Value::Null }
+    P2PResponse{ ok: false, data: Value::Null }
 }
-
 
 fn add_provider_from_remote(request: P2PRequest){
     let chain_id = request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
@@ -244,6 +239,6 @@ fn update_chain_from_remote(request: P2PRequest) {
     let blocks: Vec<Block> = from_value(json_blocks_value.clone()).unwrap();
 
     for block in blocks {
-        println!("{:?}", block);
+        add_block(block);
     }
 }
