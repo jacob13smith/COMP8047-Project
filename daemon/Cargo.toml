@@ -20,6 +20,7 @@ rustls = "0.23.5"
 rustls-pemfile = "2.1.2"
 rsa = "0.9.6"
 rcgen = "0.13.1"
+local-ip-address = "0.6.1"
 
 [lib]
 name = "internal_lib"

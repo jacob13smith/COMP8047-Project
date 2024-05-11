@@ -1,3 +1,4 @@
+use local_ip_address::local_ip;
 use serde_json::{from_str, to_string, to_value, Map, Value};
 use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
@@ -334,16 +335,40 @@ pub fn create_chain(parameters: Map<String, Value>) -> BlockchainResponse {
         data: encrypted_data,
         previous_hash: 0.to_string(), 
         hash: "".to_string(), 
-        provider_key: my_key.public_key,
+        provider_key: my_key.public_key.clone(),
         data_hash: hashed_data
     };
 
     let hash = hash_block(&genesis_block);
-    genesis_block.hash = hash;
+    genesis_block.hash = hash.clone();
+
+    let my_local_ip = local_ip().unwrap();
+    let mut fields: Map<String, Value> = Map::default();
+    fields.insert("ip".to_string(), my_local_ip.to_string().into());
+    fields.insert("name".to_string(), "OWNER".into());
+
+    let data = BlockData{ action: "add-provider".to_string(), fields: fields };
+    let encrypted_data = encrypt_data(&data, &shared_key);
+    let hashed_data = hash_data(&data);
+
+    let mut authorize_self_block = Block{
+        chain_id: id.clone(),
+        id: 1,
+        timestamp: Utc::now().timestamp(),
+        data: encrypted_data,
+        previous_hash: hash.clone(),
+        hash: "".to_string(),
+        provider_key: my_key.public_key,
+        data_hash: hashed_data,
+    };
+
+    let hash = hash_block(&authorize_self_block);
+    authorize_self_block.hash = hash.clone();
 
     let new_chain = Chain { first_name: first_name, last_name: last_name, date_of_birth: date_of_birth, id: id.clone() };
     let _ = insert_chain(&new_chain);
     let _ = insert_block(&genesis_block);
+    let _ = insert_block(&authorize_self_block);
     let _ = insert_shared_key(&shared_key, id);
     
     BlockchainResponse{ok: true, data: Value::Null}
