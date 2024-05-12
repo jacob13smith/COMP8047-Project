@@ -12,7 +12,7 @@ pub struct KeyPair {
 
 pub fn insert_chain(chain: &Chain) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
-    conn.execute("INSERT INTO chains (id, first_name, last_name, date_of_birth) VALUES (?1, ?2, ?3, ?4, ?5)", params![chain.id, chain.first_name, chain.last_name, chain.date_of_birth, 1])?;
+    conn.execute("INSERT INTO chains (id, first_name, last_name, date_of_birth, active) VALUES (?1, ?2, ?3, ?4, ?5)", params![chain.id, chain.first_name, chain.last_name, chain.date_of_birth, 1])?;
     Ok(())
 }
 
