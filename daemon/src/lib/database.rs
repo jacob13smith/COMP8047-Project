@@ -12,13 +12,13 @@ pub struct KeyPair {
 
 pub fn insert_chain(chain: &Chain) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
-    conn.execute("INSERT INTO chains (id, first_name, last_name, date_of_birth) VALUES (?1, ?2, ?3, ?4)", params![chain.id, chain.first_name, chain.last_name, chain.date_of_birth])?;
+    conn.execute("INSERT INTO chains (id, first_name, last_name, date_of_birth) VALUES (?1, ?2, ?3, ?4, ?5)", params![chain.id, chain.first_name, chain.last_name, chain.date_of_birth, 1])?;
     Ok(())
 }
 
 pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
     let conn = Connection::open(DB_STRING)?;
-    let query = "SELECT id, first_name, last_name, date_of_birth FROM chains";
+    let query = "SELECT id, first_name, last_name, date_of_birth FROM chains WHERE active = 1";
     let mut stmt = conn.prepare(query)?;
     let chain_iter = stmt.query_map([], |row| {
         Ok(Chain {
@@ -31,6 +31,12 @@ pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
 
     let chains: Result<Vec<Chain>, _> = chain_iter.collect();
     chains
+}
+
+pub fn set_chain_inactive(chain_id: String) -> Result<()>{
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("UPDATE chains SET active = 0 WHERE id = ?", params![chain_id])?;
+    Ok(())
 }
 
 pub fn fetch_all_transactions(id: String) -> Result<Vec<(i64, i64, String)>> {
@@ -268,7 +274,8 @@ fn create_tables(conn: &Connection) -> Result<()> {
             id TEXT PRIMARY KEY,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
-            date_of_birth TEXT NOT NULL
+            date_of_birth TEXT NOT NULL,
+            active INTEGER
          )",
         [],
     )?;

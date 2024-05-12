@@ -5,7 +5,7 @@ use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, Serve
 use serde_json::{from_str, from_value, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{blockchain::{add_block, get_active_providers, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
+use crate::{blockchain::{add_block, get_active_providers, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key, set_chain_inactive}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -133,6 +133,7 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
 
             match blockchain_request.action.as_str() {
                 "add-provider" => add_remote_provider( blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
+                "remove-provider" => remove_remote_provider(blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
                 "add-record" => add_record(blockchain_request.parameters),
                 _ => {}
             }
@@ -198,6 +199,18 @@ fn add_remote_provider(ip: String, chain_id: String) {
     send_chain_update(chain_id, ip);
 }
 
+fn remove_remote_provider(ip: String, chain_id: String) {
+    let shared_key = get_shared_key(chain_id.clone()).unwrap();
+    let mut parameters = Map::new();
+    parameters.insert("chain_id".to_string(), to_value(chain_id.clone()).unwrap());
+
+    let access_revoked_message = P2PRequest{
+        action: "access_revoked".to_string(),
+        parameters
+    };
+    let response = request_remote(ip.clone(), access_revoked_message);
+}
+
 fn add_record(parameters: Map<String, Value>) {
     let providers = get_active_providers(parameters.get("chain_id").unwrap().as_str().unwrap().to_string());
 
@@ -228,6 +241,12 @@ fn handle_request(request: P2PRequest) -> P2PResponse {
         },
         "update-chain" => {
             update_chain_from_remote(request)
+        },
+        "update-shared-key" => {
+            update_shared_key(request)
+        },
+        "access_revoked" => {
+            deactivate_chain(request)
         }
         _ => {}
     }
@@ -253,4 +272,13 @@ fn update_chain_from_remote(request: P2PRequest) {
     for block in blocks {
         add_block(block);
     }
+}
+
+fn update_shared_key(request: P2PRequest) {
+    // TODO: receive new shared key,save to database, and re-encrypt all blocks for that chain
+}
+
+fn deactivate_chain(request: P2PRequest) {
+    let chain_id = request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
+    let _ = set_chain_inactive(chain_id);
 }
