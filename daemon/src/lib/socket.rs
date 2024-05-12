@@ -32,16 +32,28 @@ pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>
     };
 
     // Spawn tasks to handle read operations concurrently (to allow push updates from blockchain later)
-    tokio::spawn(handle_read_from_client(stream, receiver_from_blockchain, sender_to_blockchain));
+    let handle = tokio::spawn(handle_read_from_client(stream, receiver_from_blockchain, sender_to_blockchain, listener));
+
+    // Wait for threads
+    if let Err(err) = tokio::try_join!(handle) {
+        eprintln!("Error running tasks: {:?}", err);
+    }
+        
 }
 
-async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>) {
+async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>, listener: UnixListener) {
     loop {
         let mut buffer = vec![0; 1024];
 
         match stream.read(&mut buffer).await {
             Ok(n) if n == 0 => {
-                break;
+                match listener.accept().await {
+                    Ok((new_stream, _)) => {
+                        stream = new_stream;
+                        continue;
+                    }
+                    Err(_) => {},
+                };
             }
             Ok(n) => {
                 let received_data = String::from_utf8_lossy(&buffer[..n]);
@@ -53,10 +65,7 @@ async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_block
                 let response_json = to_string(&response).unwrap();
                 stream.write_all(response_json.as_bytes()).await.unwrap();
             }
-            Err(err) => {
-                eprintln!("Error reading from client: {:?}", err);
-                break;
-            }
+            Err(_) => {}
         }
     }
 }

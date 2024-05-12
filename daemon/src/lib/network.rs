@@ -5,7 +5,7 @@ use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, Serve
 use serde_json::{from_str, from_value, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{blockchain::{add_block, get_active_providers, get_patient_info, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
+use crate::{blockchain::{add_block, get_active_providers, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -21,15 +21,14 @@ pub struct P2PResponse {
     pub data: Value,
 }
 
-pub async fn initialize_p2p_thread(receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>) {
+pub async fn initialize_p2p_thread(receiver_from_blockchain: Receiver<String>) {
 
-    let sender_clone = sender_to_blockchain.clone();
     let blockchain_listener = tokio::spawn(async move {
-        handle_request_from_blockchain(receiver_from_blockchain, sender_clone).await;
+        handle_request_from_blockchain(receiver_from_blockchain).await;
     });
 
     let network_listener = tokio::spawn(async move {
-        handle_request_from_network(sender_to_blockchain).await;
+        handle_request_from_network().await;
     });
 
     // Wait for threads
@@ -101,7 +100,7 @@ impl ResolvesServerCert for AllowAnyCertVerifier {
     }
 }
 
-async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
+async fn handle_request_from_network(){
     let config = ServerConfig::builder()
         .with_no_client_auth()
         .with_cert_resolver(Arc::new(AllowAnyCertVerifier));
@@ -126,7 +125,7 @@ async fn handle_request_from_network(mut sender_to_blockchain: Sender<String>){
     }
 }
 
-async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>) {
+async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<String>) {
 
     loop {
         if let Some(msg) = receiver_from_blockchain.recv().await {
