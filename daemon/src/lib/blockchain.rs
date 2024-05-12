@@ -297,15 +297,13 @@ pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sen
     
     let blocks = fetch_all_blocks(chain_id).unwrap();
     for block in blocks {
-        println!("Reencrypting block...");
         let new_block_option = reencrypt_block(&block, shared_key, &new_key);
         if let Some(new_block) = new_block_option {
             let _ = update_block(&new_block);
-            println!("Reencrypt success!")
         }
     }
 
-    // let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "remove-provider".to_string(), parameters}).unwrap()).await;
+    let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "remove-provider".to_string(), parameters}).unwrap()).await;
 
     BlockchainResponse{
         ok: true,

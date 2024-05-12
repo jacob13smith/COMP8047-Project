@@ -280,5 +280,6 @@ fn update_shared_key(request: P2PRequest) {
 
 fn deactivate_chain(request: P2PRequest) {
     let chain_id = request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
+    println!("{}", chain_id);
     let _ = set_chain_inactive(chain_id);
 }
