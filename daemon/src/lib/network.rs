@@ -5,7 +5,7 @@ use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, Serve
 use serde_json::{from_str, from_value, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{blockchain::{add_block, get_active_providers, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_shared_key, set_chain_inactive}};
+use crate::{blockchain::{add_block, get_active_providers, reencrypt_block, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_new_shared_key, insert_shared_key, set_chain_inactive, update_block}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -172,16 +172,20 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
     }
 }
 
-fn request_remote(ip: String, request: P2PRequest) -> P2PResponse {
-    let mut tls = connect_to_host(ip.clone()).unwrap();
-    let serialized_request = to_string(&request).unwrap();
-
-    let _ = tls.write_all(serialized_request.as_bytes());
-    tls.flush().unwrap();
-
-    let mut buf = [0; 32896];
-    tls.read(&mut buf).unwrap();
-    P2PResponse{ ok: true, data: Value::Null }
+fn request_remote(ip: String, request: &P2PRequest) -> P2PResponse {
+    let tls_attempt = connect_to_host(ip.clone());
+    if let Some(mut tls) = tls_attempt {
+        let serialized_request = to_string(&request).unwrap();
+    
+        let _ = tls.write_all(serialized_request.as_bytes());
+        tls.flush().unwrap();
+    
+        let mut buf = [0; 32896];
+        tls.read(&mut buf).unwrap();
+        P2PResponse{ ok: true, data: Value::Null }
+    } else {
+        P2PResponse{ok: false, data: Value::Null}
+    }
 }
 
 fn add_remote_provider(ip: String, chain_id: String) {
@@ -193,22 +197,36 @@ fn add_remote_provider(ip: String, chain_id: String) {
         action: "add-provider".to_string(),
         parameters
     };
-    let response = request_remote(ip.clone(), share_key_message);
+    let response = request_remote(ip.clone(), &share_key_message);
 
     // Send all the blocks
     send_chain_update(chain_id, ip);
 }
 
 fn remove_remote_provider(ip: String, chain_id: String) {
-    let shared_key = get_shared_key(chain_id.clone()).unwrap();
     let mut parameters = Map::new();
     parameters.insert("chain_id".to_string(), to_value(chain_id.clone()).unwrap());
-
+    
     let access_revoked_message = P2PRequest{
         action: "access_revoked".to_string(),
         parameters
     };
-    let response = request_remote(ip.clone(), access_revoked_message);
+    let response = request_remote(ip.clone(), &access_revoked_message);
+    
+    
+    let shared_key = get_shared_key(chain_id.clone()).unwrap();
+    let mut parameters = Map::new();
+    parameters.insert("chain_id".to_string(), to_value(chain_id.clone()).unwrap());
+    parameters.insert("shared_key".to_string(), to_value(shared_key).unwrap());
+    let providers = get_active_providers(chain_id);
+    let update_shared_key_message = P2PRequest{
+        action: "update-shared-key".to_string(),
+        parameters
+    };
+
+    for provider in providers {
+        request_remote(provider.1, &update_shared_key_message);
+    }
 }
 
 fn add_record(parameters: Map<String, Value>) {
@@ -229,7 +247,7 @@ fn send_chain_update(chain_id: String, ip: String) {
         parameters
     };
 
-    let response = request_remote(ip.clone(), update_chain_message);
+    let response = request_remote(ip.clone(), &update_chain_message);
 }
 
 // --------- REMOTE REQUEST HANDLERS ------------ //
@@ -275,7 +293,26 @@ fn update_chain_from_remote(request: P2PRequest) {
 }
 
 fn update_shared_key(request: P2PRequest) {
-    // TODO: receive new shared key,save to database, and re-encrypt all blocks for that chain
+    let chain_id = request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
+    let new_key_value = request.parameters.get("shared_key").unwrap();
+    // Convert the shared_key_value to a Vec<u8>
+    let new_key:Vec<u8> = match new_key_value {
+        Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8).collect(),
+        _ => panic!("shared_key field is not an array"),
+    };
+
+    let old_key_vec = get_shared_key(chain_id.clone()).unwrap();
+    let old_key = old_key_vec.as_slice();
+
+    let blocks = fetch_all_blocks(chain_id.clone()).unwrap();
+    for block in blocks {
+        let new_block_option = reencrypt_block(&block, old_key, &new_key);
+        if let Some(new_block) = new_block_option {
+            let _ = update_block(&new_block);
+        }
+    }
+    
+    let _ = insert_new_shared_key(&new_key, chain_id);
 }
 
 fn deactivate_chain(request: P2PRequest) {
