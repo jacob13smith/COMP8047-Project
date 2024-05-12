@@ -22,6 +22,7 @@ class PatientPage extends StatefulWidget {
 
 class _PatientPage extends State<PatientPage> {
   Map info = {"date_of_birth": "", "providers": [], "records": []};
+  late Timer _timer;
 
   final TextEditingController _providerNameController = TextEditingController();
   final TextEditingController _providerIPController = TextEditingController();
@@ -29,13 +30,16 @@ class _PatientPage extends State<PatientPage> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _textController = TextEditingController();
 
-  void requestPatientInfo() async {
+  void requestPatientInfo(BuildContext context) async {
     Map<String, dynamic> jsonRequest = {
       'action': 'get_patient_info',
       'parameters': {'id': widget.id}
     };
-    dynamic patientInfo = await widget.socketApi.sendRequest(jsonRequest);
-    print(patientInfo);
+    Map patientInfo = await widget.socketApi.sendRequest(jsonRequest);
+    if (patientInfo.isEmpty) {
+      // ignore: use_build_context_synchronously
+      Navigator.pop(context);
+    }
 
     setState(() {
       info = patientInfo;
@@ -45,10 +49,16 @@ class _PatientPage extends State<PatientPage> {
   @override
   void initState() {
     super.initState();
-    requestPatientInfo();
-    Timer.periodic(const Duration(seconds: 3), (timer) {
-      requestPatientInfo();
+    requestPatientInfo(context);
+    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      requestPatientInfo(context);
     });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
   }
 
   @override
@@ -173,7 +183,8 @@ class _PatientPage extends State<PatientPage> {
                                                         .then((response) => {
                                                               Navigator.pop(
                                                                   context),
-                                                              requestPatientInfo(),
+                                                              requestPatientInfo(
+                                                                  context),
                                                               _providerNameController
                                                                   .clear(),
                                                               _providerIPController
@@ -197,110 +208,124 @@ class _PatientPage extends State<PatientPage> {
                             DataColumn(label: Text('Name')),
                             DataColumn(label: Text('IP Address')),
                           ],
-                          rows:
-                              (info['providers'] as List<dynamic>).map((data) {
-                            return DataRow(
-                                cells: [
-                                  DataCell(Text(data[0] ?? '')),
-                                  DataCell(Text(data[1] ?? '')),
-                                ],
-                                onSelectChanged: (_) {
-                                  showModalBottomSheet(
-                                      context: context,
-                                      builder: (BuildContext context) {
-                                        return SingleChildScrollView(
-                                            child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        vertical: 10.0,
-                                                        horizontal: 20.0),
-                                                child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      const Text(
-                                                        'Provider',
-                                                        style: TextStyle(
-                                                          fontSize: 24.0,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(
-                                                        height: 20.0,
-                                                      ),
-                                                      const Text(
-                                                        'Name',
-                                                        style: TextStyle(
-                                                            fontSize: 16,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold),
-                                                      ),
-                                                      Text(
-                                                        data[0],
-                                                      ),
-                                                      const SizedBox(
-                                                          height: 20.0),
-                                                      const Text(
-                                                        'IP Address',
-                                                        style: TextStyle(
-                                                            fontSize: 16,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold),
-                                                      ),
-                                                      Text(
-                                                        data[1],
-                                                      ),
-                                                      const SizedBox(
-                                                          height: 20.0),
-                                                      ElevatedButton(
-                                                        style: ButtonStyle(
-                                                            backgroundColor:
-                                                                MaterialStateProperty
-                                                                    .all<Color>(
+                          rows: info.containsKey("providers")
+                              ? (info['providers'] as List<dynamic>)
+                                  .map((data) {
+                                  return DataRow(
+                                      cells: [
+                                        DataCell(Text(data[0] ?? '')),
+                                        DataCell(Text(data[1] ?? '')),
+                                      ],
+                                      onSelectChanged: (_) {
+                                        if (data[0] != "OWNER") {
+                                          showModalBottomSheet(
+                                              context: context,
+                                              builder: (BuildContext context) {
+                                                return SingleChildScrollView(
+                                                    child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                vertical: 10.0,
+                                                                horizontal:
+                                                                    20.0),
+                                                        child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                              const Text(
+                                                                'Provider',
+                                                                style:
+                                                                    TextStyle(
+                                                                  fontSize:
+                                                                      24.0,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                height: 20.0,
+                                                              ),
+                                                              const Text(
+                                                                'Name',
+                                                                style: TextStyle(
+                                                                    fontSize:
+                                                                        16,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold),
+                                                              ),
+                                                              Text(
+                                                                data[0],
+                                                              ),
+                                                              const SizedBox(
+                                                                  height: 20.0),
+                                                              const Text(
+                                                                'IP Address',
+                                                                style: TextStyle(
+                                                                    fontSize:
+                                                                        16,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .bold),
+                                                              ),
+                                                              Text(
+                                                                data[1],
+                                                              ),
+                                                              const SizedBox(
+                                                                  height: 20.0),
+                                                              ElevatedButton(
+                                                                style: ButtonStyle(
+                                                                    backgroundColor: MaterialStateProperty.all<
+                                                                            Color>(
                                                                         Colors
                                                                             .red),
-                                                            foregroundColor:
-                                                                MaterialStateProperty
-                                                                    .all<Color>(
+                                                                    foregroundColor: MaterialStateProperty.all<
+                                                                            Color>(
                                                                         Colors
                                                                             .black)),
-                                                        onPressed: () async {
-                                                          Map<String, dynamic>
-                                                              jsonRequest = {
-                                                            'action':
-                                                                'remove_provider',
-                                                            'parameters': {
-                                                              'chain_id':
-                                                                  widget.id,
-                                                              "ip": data[1]
-                                                            }
-                                                          };
-                                                          await widget.socketApi
-                                                              .sendRequest(
-                                                                  jsonRequest)
-                                                              .then(
-                                                                  (response) =>
+                                                                onPressed:
+                                                                    () async {
+                                                                  Map<String,
+                                                                          dynamic>
+                                                                      jsonRequest =
                                                                       {
-                                                                        Navigator.pop(
-                                                                            context),
-                                                                        requestPatientInfo(),
-                                                                        _providerNameController
-                                                                            .clear(),
-                                                                        _providerIPController
-                                                                            .clear(),
-                                                                      });
-                                                        },
-                                                        child: const Text(
-                                                            'Revoke Access'),
-                                                      )
-                                                    ])));
+                                                                    'action':
+                                                                        'remove_provider',
+                                                                    'parameters':
+                                                                        {
+                                                                      'chain_id':
+                                                                          widget
+                                                                              .id,
+                                                                      "ip":
+                                                                          data[
+                                                                              1]
+                                                                    }
+                                                                  };
+                                                                  await widget
+                                                                      .socketApi
+                                                                      .sendRequest(
+                                                                          jsonRequest)
+                                                                      .then(
+                                                                          (response) =>
+                                                                              {
+                                                                                Navigator.pop(context),
+                                                                                requestPatientInfo(context),
+                                                                                _providerNameController.clear(),
+                                                                                _providerIPController.clear(),
+                                                                              });
+                                                                },
+                                                                child: const Text(
+                                                                    'Revoke Access'),
+                                                              )
+                                                            ])));
+                                              });
+                                        }
                                       });
-                                });
-                          }).toList(),
+                                }).toList()
+                              : [],
                         )
                       ],
                     ),
@@ -396,7 +421,8 @@ class _PatientPage extends State<PatientPage> {
                                                                 (response) => {
                                                                       Navigator.pop(
                                                                           context),
-                                                                      requestPatientInfo(),
+                                                                      requestPatientInfo(
+                                                                          context),
                                                                       _providerNameController
                                                                           .clear(),
                                                                       _providerIPController
@@ -419,28 +445,32 @@ class _PatientPage extends State<PatientPage> {
                               DataColumn(label: Text('Subject'))
                             ],
                             showCheckboxColumn: false,
-                            rows:
-                                (info['records'] as List<dynamic>).map((data) {
-                              DateTime dateTime =
-                                  DateTime.fromMillisecondsSinceEpoch(
-                                      data[0] * 1000);
-                              return DataRow(
-                                  cells: [
-                                    DataCell(Text(
-                                        DateFormat.yMMMMd().format(dateTime))),
-                                    DataCell(Text(data[1] ?? '')),
-                                  ],
-                                  onSelectChanged: (_) {
-                                    Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                            builder: (context) => RecordPage(
-                                                  socketApi: widget.socketApi,
-                                                  id: widget.id,
-                                                  blockId: data[2],
-                                                )));
-                                  });
-                            }).toList(),
+                            rows: info.containsKey("records")
+                                ? (info['records'] as List<dynamic>)
+                                    .map((data) {
+                                    DateTime dateTime =
+                                        DateTime.fromMillisecondsSinceEpoch(
+                                            data[0] * 1000);
+                                    return DataRow(
+                                        cells: [
+                                          DataCell(Text(DateFormat.yMMMMd()
+                                              .format(dateTime))),
+                                          DataCell(Text(data[1] ?? '')),
+                                        ],
+                                        onSelectChanged: (_) {
+                                          Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      RecordPage(
+                                                        socketApi:
+                                                            widget.socketApi,
+                                                        id: widget.id,
+                                                        blockId: data[2],
+                                                      )));
+                                        });
+                                  }).toList()
+                                : [],
                           )
                         ])),
               ),

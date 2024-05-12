@@ -6,7 +6,7 @@ use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, Serve
 use serde_json::{from_str, from_value, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{blockchain::{add_block, get_active_providers, reencrypt_block, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_new_shared_key, insert_shared_key, set_chain_inactive, update_block}};
+use crate::{blockchain::{add_block, get_active_providers, reencrypt_block, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_new_shared_key, insert_shared_key, set_chain_active, update_block}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -311,8 +311,8 @@ fn add_provider_from_remote(request: P2PRequest){
 
 fn update_chain_from_remote(request: P2PRequest) {
     let json_blocks_value = request.parameters.get("blocks").unwrap();
-    let blocks: Vec<Block> = from_value(json_blocks_value.clone()).unwrap();
 
+    let blocks: Vec<Block> = from_value(json_blocks_value.clone()).unwrap();
     for block in blocks {
         add_block(block);
     }
@@ -343,5 +343,5 @@ fn update_shared_key(request: P2PRequest) {
 
 fn deactivate_chain(request: P2PRequest) {
     let chain_id = request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
-    let _ = set_chain_inactive(chain_id);
+    let _ = set_chain_active(chain_id, false);
 }

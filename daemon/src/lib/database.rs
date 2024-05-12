@@ -33,12 +33,6 @@ pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
     chains
 }
 
-pub fn set_chain_inactive(chain_id: String) -> Result<()>{
-    let conn = Connection::open(DB_STRING)?;
-    conn.execute("UPDATE chains SET active = 0 WHERE id = ?", params![chain_id])?;
-    Ok(())
-}
-
 pub fn fetch_all_transactions(id: String) -> Result<Vec<(i64, i64, String)>> {
     let conn = Connection::open(DB_STRING)?;
 
@@ -124,6 +118,30 @@ pub fn get_next_chain_id() -> Result<i64> {
     let next_id: i64 = conn.query_row(&query, [], |row| row.get(0))?;
 
     Ok(next_id)
+}
+
+pub fn chain_exists(id: String) -> Result<bool>{
+    let conn = Connection::open(DB_STRING)?;
+    let query = "SELECT EXISTS(SELECT 1 FROM chains WHERE id = ?)";
+    let exists: bool = conn.query_row(query, [id], |row| row.get(0))?;
+    Ok(exists)
+}
+
+pub fn is_chain_active(id: String) -> Result<bool> {
+    let conn = Connection::open(DB_STRING)?;
+    let query = "SELECT active from chains where id = ?";
+    let mut statement = conn.prepare(&query)?;
+    let result = statement.query_row([id], |row| {
+        let value: i32 = row.get(0)?;
+        Ok(value != 0)
+    })?;
+    Ok(result)
+}
+
+pub fn set_chain_active(chain_id: String, active: bool) -> Result<()>{
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("UPDATE chains SET active = 0 WHERE id = ?", params![chain_id, if active {1} else {0}])?;
+    Ok(())
 }
 
 pub fn insert_block(block: &Block) -> Result<()> {

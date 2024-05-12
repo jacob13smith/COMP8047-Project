@@ -9,7 +9,7 @@ use rand::{rngs::OsRng, RngCore};
 use serde::{de, Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
-use crate::database::{fetch_all_blocks, fetch_all_transactions, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_new_shared_key, insert_shared_key, update_block};
+use crate::database::{chain_exists, fetch_all_blocks, fetch_all_transactions, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_new_shared_key, insert_shared_key, is_chain_active, set_chain_active, update_block};
 use crate::network::P2PRequest;
 
 // Define the structure for a block
@@ -118,6 +118,9 @@ pub fn get_chains() -> BlockchainResponse {
 pub fn get_patient_info(id: String) -> BlockchainResponse {
     let shared_key_vec = get_shared_key(id.clone()).unwrap();
     let shared_key = shared_key_vec.as_slice();
+    if !is_chain_active(id.clone()).unwrap(){
+        return BlockchainResponse{ok: false, data: Value::Null};
+    }
     
     match fetch_all_transactions(id){
         Ok(blocks) => {
@@ -440,6 +443,10 @@ pub fn reencrypt_block(block: &Block, old_key: &[u8], new_key: &[u8]) -> Option<
 pub fn add_block(block: Block) {
     let chain_id = block.chain_id.clone();
     let block_id = block.id.clone();
+
+    if chain_exists(chain_id.clone()).unwrap() {
+        let _ = set_chain_active(chain_id.clone(), true);
+    }
 
     let last_block_res = fetch_last_block(chain_id.clone());
 

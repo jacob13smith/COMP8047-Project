@@ -79,6 +79,8 @@ async fn request_blockchain(request_id: i64, action: String, parameters: &Map<St
             let blockchain_response: BlockchainResponse = from_str(&msg).unwrap();
             if blockchain_response.ok {
                 response.data = blockchain_response.data.to_string();
+            } else {
+                response.data = "{}".to_string();
             }
             break;
         }
