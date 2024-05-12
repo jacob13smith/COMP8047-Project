@@ -35,6 +35,7 @@ class _PatientPage extends State<PatientPage> {
       'parameters': {'id': widget.id}
     };
     dynamic patientInfo = await widget.socketApi.sendRequest(jsonRequest);
+    print(patientInfo);
 
     setState(() {
       info = patientInfo;

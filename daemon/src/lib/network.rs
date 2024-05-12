@@ -251,7 +251,6 @@ fn send_new_shared_key(chain_id: String){
     };
 
     for provider in providers {
-        println!("Sending new shared key to {}", provider.1);
         request_remote(provider.1, &update_shared_key_message);
     }
 }
