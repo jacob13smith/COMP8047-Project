@@ -116,7 +116,10 @@ pub fn get_chains() -> BlockchainResponse {
 }
 
 pub fn get_patient_info(id: String) -> BlockchainResponse {
-    let shared_key_vec = get_shared_key(id.clone()).unwrap();
+    let shared_key_vec = match get_shared_key(id.clone()){
+        Ok(key) => key,
+        Err(_) => return BlockchainResponse{ok: false, data: Value::Null}
+    };
     let shared_key = shared_key_vec.as_slice();
     if !is_chain_active(id.clone()).unwrap(){
         return BlockchainResponse{ok: false, data: Value::Null};

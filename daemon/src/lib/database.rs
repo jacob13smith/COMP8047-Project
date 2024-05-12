@@ -140,14 +140,17 @@ pub fn is_chain_active(id: String) -> Result<bool> {
 
 pub fn set_chain_active(chain_id: String, active: bool) -> Result<()>{
     let conn = Connection::open(DB_STRING)?;
-    conn.execute("UPDATE chains SET active = 0 WHERE id = ?", params![chain_id, if active {1} else {0}])?;
+    conn.execute("UPDATE chains SET active = ? WHERE id = ?;", params![if active {1} else {0}, chain_id.clone()])?;
+    if !active {
+        conn.execute("UPDATE shared_keys SET active = 0 WHERE chain_id = ?;", params![chain_id])?;
+    }
     Ok(())
 }
 
 pub fn insert_block(block: &Block) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
     conn.execute("INSERT INTO blocks (chain_id, id, timestamp, data, previous_hash, hash, provider_key, data_hash) 
-                        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", 
+                        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);", 
                         params![block.chain_id, block.id, block.timestamp, block.data, block.previous_hash, block.hash, block.provider_key, block.data_hash])?;
     Ok(())
 }

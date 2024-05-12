@@ -36,6 +36,7 @@ class _PatientPage extends State<PatientPage> {
       'parameters': {'id': widget.id}
     };
     Map patientInfo = await widget.socketApi.sendRequest(jsonRequest);
+    print(patientInfo);
     if (patientInfo.isEmpty) {
       // ignore: use_build_context_synchronously
       Navigator.pop(context);

@@ -306,7 +306,7 @@ fn add_provider_from_remote(request: P2PRequest){
         Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8).collect(),
         _ => panic!("shared_key field is not an array"),
     };
-    insert_shared_key(&shared_key, chain_id).unwrap();
+    insert_new_shared_key(&shared_key, chain_id).unwrap();
 }
 
 fn update_chain_from_remote(request: P2PRequest) {
