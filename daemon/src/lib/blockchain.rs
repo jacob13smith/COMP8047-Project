@@ -291,6 +291,8 @@ pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sen
 
     let _ = insert_block(&remove_provider_block);
 
+    let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "remove-provider".to_string(), parameters}).unwrap()).await;
+
     // Fetch all blocks, and one-by-one, re-encrypt the data, check that the block hash is the same, and save to database
     let new_key = generate_shared_key();
     let _ = insert_new_shared_key(&new_key, chain_id.clone());
@@ -303,7 +305,9 @@ pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sen
         }
     }
 
-    let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "remove-provider".to_string(), parameters}).unwrap()).await;
+    let mut shared_key_params: Map<String, Value> = Map::default();
+    shared_key_params.insert("chain_id".to_string(), to_value(new_key).unwrap());
+    let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "send_new_shared_key".to_string(), parameters: shared_key_params}).unwrap()).await;
 
     BlockchainResponse{
         ok: true,

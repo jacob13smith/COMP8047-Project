@@ -135,6 +135,7 @@ async fn handle_request_from_blockchain(mut receiver_from_blockchain: Receiver<S
                 "add-provider" => add_remote_provider( blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
                 "remove-provider" => remove_remote_provider(blockchain_request.parameters.get("ip").unwrap().as_str().unwrap().to_string(), blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
                 "add-record" => add_record(blockchain_request.parameters),
+                "send_new_shared_key" => send_new_shared_key(blockchain_request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string()),
                 _ => {}
             }
         }
@@ -164,9 +165,15 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
     
         let server_name = "localhost".try_into().unwrap();
         let conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-        let sock = TcpStream::connect(format!("{}:8047", ip)).unwrap();
-        let tls = rustls::StreamOwned::new(conn, sock);
-        Some(tls)
+        let sock_attempt = TcpStream::connect(format!("{}:8047", ip));
+        match sock_attempt {
+            Ok(socket) => {
+                let tls = rustls::StreamOwned::new(conn, socket);
+                Some(tls)
+            },
+            Err(_) => None,
+        }
+
     } else {
         None
     }
@@ -212,10 +219,11 @@ fn remove_remote_provider(ip: String, chain_id: String) {
         parameters
     };
     let response = request_remote(ip.clone(), &access_revoked_message);
-    
-    
-    let shared_key = get_shared_key(chain_id.clone()).unwrap();
+}
+
+fn send_new_shared_key(chain_id: String){
     let mut parameters = Map::new();
+    let shared_key = get_shared_key(chain_id.clone()).unwrap();
     parameters.insert("chain_id".to_string(), to_value(chain_id.clone()).unwrap());
     parameters.insert("shared_key".to_string(), to_value(shared_key).unwrap());
     let providers = get_active_providers(chain_id);
