@@ -57,7 +57,7 @@ async fn handle_read_from_client(mut stream: UnixStream, mut receiver_from_block
             }
             Ok(n) => {
                 let received_data = String::from_utf8_lossy(&buffer[..n]);
-                println!("{}", received_data);
+                //println!("{}", received_data);
                 let request: SocketRequest = from_str(&received_data).unwrap();
                 let action: &str = &request.action;
                 let parameters = &request.parameters;

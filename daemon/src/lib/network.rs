@@ -169,8 +169,8 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
         match sock_attempt {
             Ok(socket) => {
                 let tls = rustls::StreamOwned::new(conn, socket);
-                Some(tls)
-            },
+                    Some(tls)
+                },
             Err(_) => None,
         }
 
