@@ -297,7 +297,7 @@ pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sen
     let new_key = generate_shared_key();
     let _ = insert_new_shared_key(&new_key, chain_id.clone());
     
-    let blocks = fetch_all_blocks(chain_id).unwrap();
+    let blocks = fetch_all_blocks(chain_id.clone()).unwrap();
     for block in blocks {
         let new_block_option = reencrypt_block(&block, shared_key, &new_key);
         if let Some(new_block) = new_block_option {
@@ -306,7 +306,7 @@ pub async fn remove_provider(parameters: Map<String, Value>, sender_to_p2p: &Sen
     }
 
     let mut shared_key_params: Map<String, Value> = Map::default();
-    shared_key_params.insert("chain_id".to_string(), to_value(new_key).unwrap());
+    shared_key_params.insert("chain_id".to_string(), to_value(chain_id).unwrap());
     let _ = sender_to_p2p.send(to_string(&P2PRequest{action: "send_new_shared_key".to_string(), parameters: shared_key_params}).unwrap()).await;
 
     BlockchainResponse{

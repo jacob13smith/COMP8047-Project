@@ -206,8 +206,11 @@ fn add_remote_provider(ip: String, chain_id: String) {
     };
     let response = request_remote(ip.clone(), &share_key_message);
 
-    // Send all the blocks
-    send_chain_update(chain_id, ip);
+    // Send all the blocks to all providers
+    let providers = get_active_providers(chain_id.clone());
+    for provider in providers {
+        send_chain_update(chain_id.clone(), provider.1);
+    }
 }
 
 fn remove_remote_provider(ip: String, chain_id: String) {
@@ -219,6 +222,12 @@ fn remove_remote_provider(ip: String, chain_id: String) {
         parameters
     };
     let response = request_remote(ip.clone(), &access_revoked_message);
+
+    // Send all the blocks to all providers
+    let providers = get_active_providers(chain_id.clone());
+    for provider in providers {
+        send_chain_update(chain_id.clone(), provider.1);
+    }
 }
 
 fn send_new_shared_key(chain_id: String){
