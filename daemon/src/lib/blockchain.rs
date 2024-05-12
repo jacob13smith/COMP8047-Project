@@ -1,11 +1,12 @@
 use local_ip_address::local_ip;
+use openssl::error::ErrorStack;
 use serde_json::{from_str, to_string, to_value, Map, Value};
 use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
 use openssl::sha::Sha256;
 use openssl::symm::{Cipher, encrypt, decrypt};
 use rand::{rngs::OsRng, RngCore};
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
 use crate::database::{fetch_all_blocks, fetch_all_transactions, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_new_shared_key, insert_shared_key, update_block};
@@ -129,21 +130,28 @@ pub fn get_patient_info(id: String) -> BlockchainResponse {
             let mut providers: Vec<(Value, Value)> = vec![];
             
             for (timestamp, block_id, encrypted_data) in blocks {
-                let block_data = decrypt_data(&encrypted_data, shared_key);
-                match block_data.action.as_str() {
-                    "genesis" => {
-                        data.insert("date_of_birth".to_string(), block_data.fields.get("date_of_birth").unwrap().clone());
+                let block_data_result = decrypt_data(&encrypted_data, shared_key);
+                match block_data_result{
+                    Ok(block_data) => {
+                        match block_data.action.as_str() {
+                            "genesis" => {
+                                data.insert("date_of_birth".to_string(), block_data.fields.get("date_of_birth").unwrap().clone());
+                            },
+                            "add-provider" => {
+                                providers.push((block_data.fields.get("name").unwrap().clone(), block_data.fields.get("ip").unwrap().clone()));
+                            }
+                            "add-record" => {
+                                records.push((to_value(timestamp).unwrap(), block_data.fields.get("subject").unwrap().clone(), to_value(block_id).unwrap()));
+                            }
+                            "remove-provider" => {
+                                providers.retain(|(_, ip)| ip.as_str().unwrap().to_string() != block_data.fields.get("ip").unwrap().as_str().unwrap().to_string())
+                            }
+                            _ => {}
+                        }
                     },
-                    "add-provider" => {
-                        providers.push((block_data.fields.get("name").unwrap().clone(), block_data.fields.get("ip").unwrap().clone()));
-                    }
-                    "add-record" => {
-                        records.push((to_value(timestamp).unwrap(), block_data.fields.get("subject").unwrap().clone(), to_value(block_id).unwrap()));
-                    }
-                    "remove-provider" => {
-                        providers.retain(|(_, ip)| ip.as_str().unwrap().to_string() != block_data.fields.get("ip").unwrap().as_str().unwrap().to_string())
-                    }
-                    _ => {}
+                    Err(_) => {
+                        return BlockchainResponse{ ok: false, data: Value::Null }
+                    },
                 }
             }
 
@@ -167,15 +175,20 @@ pub fn get_active_providers(id: String) -> Vec<(String, String)>{
             let mut providers: Vec<(String, String)> = vec![];
             
             for (timestamp, block_id, encrypted_data) in blocks {
-                let block_data = decrypt_data(&encrypted_data, shared_key);
-                match block_data.action.as_str() {
-                    "add-provider" => {
-                        providers.push((block_data.fields.get("name").unwrap().clone().as_str().unwrap().to_string(), block_data.fields.get("ip").unwrap().clone().as_str().unwrap().to_string()));
-                    }
-                    "remove-provider" => {
-                        providers.retain(|(_, ip)| *ip != block_data.fields.get("ip").unwrap().as_str().unwrap().to_string())
-                    }
-                    _ => {}
+                let block_data_result = decrypt_data(&encrypted_data, shared_key);
+                match block_data_result {
+                    Ok(block_data) => {
+                        match block_data.action.as_str() {
+                            "add-provider" => {
+                                providers.push((block_data.fields.get("name").unwrap().clone().as_str().unwrap().to_string(), block_data.fields.get("ip").unwrap().clone().as_str().unwrap().to_string()));
+                            }
+                            "remove-provider" => {
+                                providers.retain(|(_, ip)| *ip != block_data.fields.get("ip").unwrap().as_str().unwrap().to_string())
+                            }
+                            _ => {}
+                        }
+                    },
+                    Err(_) => return vec![],
                 }
             }
             providers
@@ -190,9 +203,14 @@ pub async fn get_record(chain_id: String, block_id: i64) -> BlockchainResponse {
 
     match fetch_record(chain_id, block_id) {
         Ok(record) => {
-            let mut block_data = decrypt_data(&record.1, shared_key);
-            block_data.fields.insert("timestamp".to_string(), to_value(record.0).unwrap());
-            return BlockchainResponse{ok: true, data: to_value(block_data.fields).unwrap()}
+            let block_data_result = decrypt_data(&record.1, shared_key);
+            match block_data_result{
+                Ok(mut block_data) => {
+                    block_data.fields.insert("timestamp".to_string(), to_value(record.0).unwrap());
+                    return BlockchainResponse{ok: true, data: to_value(block_data.fields).unwrap()}
+                },
+                Err(_) => {return BlockchainResponse{ok: false, data: Value::Null};}
+            }
         },
         Err(_) => {return BlockchainResponse{ok: false, data: Value::Null};}
     }
@@ -392,26 +410,31 @@ fn generate_shared_key() -> [u8; 32] {
 pub fn reencrypt_block(block: &Block, old_key: &[u8], new_key: &[u8]) -> Option<Block> {
     let existing_hash = &block.hash;
     let encrypted_data = &block.data;
-    let decrypted_data = decrypt_data(encrypted_data.as_str(), old_key);
-    let reencrypted_data = encrypt_data(&decrypted_data, new_key);
-
-    let new_block = Block { 
-        chain_id: block.chain_id.clone(), 
-        id: block.id.clone(), 
-        timestamp: block.timestamp.clone(), 
-        data: reencrypted_data, 
-        previous_hash: block.previous_hash.clone(), 
-        hash: block.hash.clone(), 
-        provider_key: block.provider_key.clone(), 
-        data_hash: block.data_hash.clone()
-    };
-
-    let new_hash = hash_block(&new_block);
-    if new_hash != *existing_hash {
-        return None
+    let decrypted_data_result = decrypt_data(encrypted_data.as_str(), old_key);
+    match decrypted_data_result{
+        Ok(decrypted_data) => {
+            let reencrypted_data = encrypt_data(&decrypted_data, new_key);
+        
+            let new_block = Block { 
+                chain_id: block.chain_id.clone(), 
+                id: block.id.clone(), 
+                timestamp: block.timestamp.clone(), 
+                data: reencrypted_data, 
+                previous_hash: block.previous_hash.clone(), 
+                hash: block.hash.clone(), 
+                provider_key: block.provider_key.clone(), 
+                data_hash: block.data_hash.clone()
+            };
+        
+            let new_hash = hash_block(&new_block);
+            if new_hash != *existing_hash {
+                return None
+            }
+        
+            Some(new_block)
+        },
+        Err(_) => None
     }
-
-    Some(new_block)
 }
 
 pub fn add_block(block: Block) {
@@ -429,10 +452,10 @@ pub fn add_block(block: Block) {
         Err(_) => {
             if block_id == 0 {
                 let shared_key = get_shared_key(chain_id.clone()).unwrap();
-                let decrypted_data = decrypt_data(&block.data.clone(), &shared_key);
+                let decrypted_data = decrypt_data(&block.data.clone(), &shared_key).unwrap();
                 let first_name = decrypted_data.fields.get("first_name").unwrap().as_str().unwrap().to_string();
-                let last_name = decrypted_data.fields.get("last_name").unwrap().as_str().unwrap().to_string();;
-                let date_of_birth = decrypted_data.fields.get("date_of_birth").unwrap().as_str().unwrap().to_string();;
+                let last_name = decrypted_data.fields.get("last_name").unwrap().as_str().unwrap().to_string();
+                let date_of_birth = decrypted_data.fields.get("date_of_birth").unwrap().as_str().unwrap().to_string();
                 let id = chain_id.clone();
                 let new_chain = Chain{ id: id, first_name: first_name, last_name: last_name, date_of_birth: date_of_birth };
                 let _ = insert_chain(&new_chain);
@@ -479,13 +502,13 @@ fn encrypt_data(data: &BlockData, key: &[u8]) -> String {
     hex_encoded_ciphertext
 }
 
-fn decrypt_data(encrypted_data: &str, key: &[u8]) -> BlockData {
+fn decrypt_data(encrypted_data: &str, key: &[u8]) -> Result<BlockData, ErrorStack> {
     let cipher = Cipher::aes_256_cbc();
     let iv = [0; 16];
     let ciphertext = encrypted_data.from_hex().unwrap();
-    let decrypted_data = decrypt(cipher, key, Some(&iv), &ciphertext).expect("Decryption error");
+    let decrypted_data = decrypt(cipher, key, Some(&iv), &ciphertext)?;
     let decrypted_string = String::from_utf8(decrypted_data).expect("UTF-8 decoding error");
 
     // Parse the JSON string into BlockData struct
-    from_str(&decrypted_string).expect("JSON deserialization error")
+    Ok(from_str(&decrypted_string).expect("JSON deserialization error"))
 }

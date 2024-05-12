@@ -1,4 +1,5 @@
 use std::{io::{Cursor, Read, Write}, net::{TcpListener, TcpStream}, str::from_utf8, sync::Arc};
+use local_ip_address::local_ip;
 use openssl::pkey::PKey;
 use rcgen::generate_simple_self_signed;
 use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, crypto::aws_lc_rs::sign::any_supported_type, pki_types::{CertificateDer, PrivateKeyDer}, server::ResolvesServerCert, ServerConfig};
@@ -180,6 +181,11 @@ fn connect_to_host(ip: String) -> Option<rustls::StreamOwned<rustls::ClientConne
 }
 
 fn request_remote(ip: String, request: &P2PRequest) -> P2PResponse {
+    let my_local_ip = local_ip().unwrap();
+    if my_local_ip.to_string() == ip {
+        return P2PResponse{ ok: true, data: Value::Null };
+    }
+
     let tls_attempt = connect_to_host(ip.clone());
     if let Some(mut tls) = tls_attempt {
         let serialized_request = to_string(&request).unwrap();
@@ -188,8 +194,11 @@ fn request_remote(ip: String, request: &P2PRequest) -> P2PResponse {
         tls.flush().unwrap();
     
         let mut buf = [0; 32896];
-        tls.read(&mut buf).unwrap();
-        P2PResponse{ ok: true, data: Value::Null }
+        let response = tls.read(&mut buf);
+        match response {
+            Ok(_) => P2PResponse{ ok: true, data: Value::Null },
+            Err(_) => P2PResponse{ok: false, data: Value::Null},
+        }
     } else {
         P2PResponse{ok: false, data: Value::Null}
     }
@@ -242,6 +251,7 @@ fn send_new_shared_key(chain_id: String){
     };
 
     for provider in providers {
+        println!("Sending new shared key to {}", provider.1);
         request_remote(provider.1, &update_shared_key_message);
     }
 }
