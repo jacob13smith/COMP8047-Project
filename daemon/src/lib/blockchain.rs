@@ -6,7 +6,7 @@ use chrono::Utc;
 use openssl::sha::Sha256;
 use openssl::symm::{Cipher, encrypt, decrypt};
 use rand::{rngs::OsRng, RngCore};
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
 use crate::database::{chain_exists, fetch_all_blocks, fetch_all_transactions, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_new_shared_key, insert_shared_key, is_chain_active, set_chain_active, update_block};
@@ -180,7 +180,7 @@ pub fn get_active_providers(id: String) -> Vec<(String, String)>{
             // For now, providers are of shape: name, ip_address
             let mut providers: Vec<(String, String)> = vec![];
             
-            for (timestamp, block_id, encrypted_data) in blocks {
+            for (_, _, encrypted_data) in blocks {
                 let block_data_result = decrypt_data(&encrypted_data, shared_key);
                 match block_data_result {
                     Ok(block_data) => {

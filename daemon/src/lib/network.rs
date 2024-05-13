@@ -5,8 +5,8 @@ use rcgen::generate_simple_self_signed;
 use rustls::{client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, crypto::aws_lc_rs::sign::any_supported_type, pki_types::{CertificateDer, PrivateKeyDer}, server::ResolvesServerCert, ServerConfig};
 use serde_json::{from_str, from_value, to_string, to_value, Map, Value};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc::{Receiver, Sender};
-use crate::{blockchain::{add_block, get_active_providers, reencrypt_block, Block}, database::{fetch_all_blocks, get_key_pair, get_shared_key, insert_new_shared_key, insert_shared_key, set_chain_active, update_block}};
+use tokio::sync::mpsc::Receiver;
+use crate::{blockchain::{add_block, get_active_providers, reencrypt_block, Block}, database::{chain_exists, fetch_all_blocks, get_key_pair, get_shared_key, insert_new_shared_key, set_chain_active, update_block}};
 
 const DEFAULT_PORT: i32 = 8047;
 
@@ -213,7 +213,7 @@ fn add_remote_provider(ip: String, chain_id: String) {
         action: "add-provider".to_string(),
         parameters
     };
-    let response = request_remote(ip.clone(), &share_key_message);
+    let _ = request_remote(ip.clone(), &share_key_message);
 
     // Send all the blocks to all providers
     let providers = get_active_providers(chain_id.clone());
@@ -230,7 +230,7 @@ fn remove_remote_provider(ip: String, chain_id: String) {
         action: "access_revoked".to_string(),
         parameters
     };
-    let response = request_remote(ip.clone(), &access_revoked_message);
+    let _ = request_remote(ip.clone(), &access_revoked_message);
 
     // Send all the blocks to all providers
     let providers = get_active_providers(chain_id.clone());
@@ -273,7 +273,7 @@ fn send_chain_update(chain_id: String, ip: String) {
         parameters
     };
 
-    let response = request_remote(ip.clone(), &update_chain_message);
+    let _ = request_remote(ip.clone(), &update_chain_message);
 }
 
 // --------- REMOTE REQUEST HANDLERS ------------ //
@@ -306,6 +306,15 @@ fn add_provider_from_remote(request: P2PRequest){
         Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8).collect(),
         _ => panic!("shared_key field is not an array"),
     };
+
+    if chain_exists(chain_id.clone()).unwrap() {
+        let old_key = get_shared_key(chain_id.clone()).unwrap();
+        for block in fetch_all_blocks(chain_id.clone()).unwrap(){
+            let new_block = reencrypt_block(&block, &old_key, &shared_key).unwrap();
+            let _ = update_block(&new_block);
+        }
+    }
+
     insert_new_shared_key(&shared_key, chain_id).unwrap();
 }
 

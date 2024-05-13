@@ -141,9 +141,6 @@ pub fn is_chain_active(id: String) -> Result<bool> {
 pub fn set_chain_active(chain_id: String, active: bool) -> Result<()>{
     let conn = Connection::open(DB_STRING)?;
     conn.execute("UPDATE chains SET active = ? WHERE id = ?;", params![if active {1} else {0}, chain_id.clone()])?;
-    if !active {
-        conn.execute("UPDATE shared_keys SET active = 0 WHERE chain_id = ?;", params![chain_id])?;
-    }
     Ok(())
 }
 
