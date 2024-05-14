@@ -1,5 +1,7 @@
 use local_ip_address::local_ip;
 use openssl::error::ErrorStack;
+use openssl::pkey::PKey;
+use openssl::rsa::Rsa;
 use serde_json::{from_str, to_string, to_value, Map, Value};
 use tokio::sync::mpsc::{Receiver, Sender};
 use chrono::Utc;
@@ -9,7 +11,7 @@ use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use rustc_serialize::hex::{ToHex, FromHex};
 use uuid::Uuid;
-use crate::database::{chain_exists, fetch_all_blocks, fetch_all_transactions, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_new_shared_key, insert_shared_key, is_chain_active, set_chain_active, update_block};
+use crate::database::{chain_exists, fetch_all_blocks, fetch_all_transactions, fetch_chains, fetch_last_block, fetch_record, get_key_pair, get_shared_key, insert_block, insert_chain, insert_new_shared_key, insert_shared_key, is_chain_active, set_chain_active, update_block, KeyPair};
 use crate::network::P2PRequest;
 
 // Define the structure for a block
@@ -37,11 +39,6 @@ pub struct Chain {
     pub first_name: String,
     pub last_name: String,
     pub date_of_birth: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct CreateChainParams {
-    pub chain_name: String
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,7 +93,7 @@ pub async fn initialize_blockchain_thread(mut receiver: Receiver<String>, sender
                     _ => {}
                 }
             } else if blockchain_request.sender == "p2p" {
-                // TODO: Add p2p request/responses
+                // TODO: Add p2p request/responses in future enhancements
                 match blockchain_request.action.as_str() {
                     _ => {}
                 }
@@ -411,6 +408,25 @@ fn generate_shared_key() -> [u8; 32] {
     let mut key: [u8; 32] = [0u8; 32];
     OsRng.fill_bytes(&mut key);
     key
+}
+
+pub fn generate_key_pair() -> KeyPair {
+    // Generate RSA key pair
+    let rsa = Rsa::generate(2048).unwrap();
+
+    // Extract public key as PEM string
+    let public_key_pem = rsa.public_key_to_pem().unwrap();
+
+    // Extract private key as PKCS#8 PEM string
+    let private_key_der = {
+        let pkey = PKey::from_rsa(rsa).unwrap();
+        pkey.private_key_to_pkcs8().unwrap()
+    };
+
+    KeyPair {
+        public_key: String::from_utf8(public_key_pem).unwrap(),
+        private_key: private_key_der,
+    }
 }
 
 pub fn reencrypt_block(block: &Block, old_key: &[u8], new_key: &[u8]) -> Option<Block> {

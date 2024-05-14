@@ -112,10 +112,8 @@ async fn handle_request_from_network(){
         let (stream, _) = listener.accept().unwrap();
         let conn = rustls::ServerConnection::new(Arc::new(config.clone())).unwrap();
         let mut tls = rustls::StreamOwned::new(conn, stream);
-        // conn.complete_io(&mut stream).unwrap();
+        
         let mut buf = [0; 32896];
-
-        // let len =  conn.reader().read(&mut buf).unwrap();
 
         let len = tls.read(&mut buf).unwrap();
 
@@ -276,7 +274,7 @@ fn send_chain_update(chain_id: String, ip: String) {
     let _ = request_remote(ip.clone(), &update_chain_message);
 }
 
-// --------- REMOTE REQUEST HANDLERS ------------ //
+// --------- INCOMING REQUEST HANDLING ------------ //
 
 fn handle_request(request: P2PRequest) -> P2PResponse {
     match request.action.as_str() {
@@ -330,7 +328,6 @@ fn update_chain_from_remote(request: P2PRequest) {
 fn update_shared_key(request: P2PRequest) {
     let chain_id = request.parameters.get("chain_id").unwrap().as_str().unwrap().to_string();
     let new_key_value = request.parameters.get("shared_key").unwrap();
-    // Convert the shared_key_value to a Vec<u8>
     let new_key:Vec<u8> = match new_key_value {
         Value::Array(array) => array.iter().map(|v| v.as_u64().unwrap() as u8).collect(),
         _ => panic!("shared_key field is not an array"),

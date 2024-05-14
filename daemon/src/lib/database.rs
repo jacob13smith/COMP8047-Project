@@ -1,6 +1,5 @@
-use openssl::{pkey::PKey, rsa::Rsa};
 use rusqlite::{params, Connection, Result};
-use crate::blockchain::{Chain, Block};
+use crate::blockchain::{generate_key_pair, Block, Chain};
 
 const DB_STRING: &str = "ehr.sqlite";
 
@@ -10,11 +9,63 @@ pub struct KeyPair {
     pub private_key: Vec<u8>,
 }
 
+// ----- Insertions and Updates ----- //
+
 pub fn insert_chain(chain: &Chain) -> Result<()> {
     let conn = Connection::open(DB_STRING)?;
     conn.execute("INSERT INTO chains (id, first_name, last_name, date_of_birth, active) VALUES (?1, ?2, ?3, ?4, ?5)", params![chain.id, chain.first_name, chain.last_name, chain.date_of_birth, 1])?;
     Ok(())
 }
+
+pub fn set_chain_active(chain_id: String, active: bool) -> Result<()>{
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("UPDATE chains SET active = ? WHERE id = ?;", params![if active {1} else {0}, chain_id.clone()])?;
+    Ok(())
+}
+
+pub fn insert_block(block: &Block) -> Result<()> {
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("INSERT INTO blocks (chain_id, id, timestamp, data, previous_hash, hash, provider_key, data_hash) 
+                        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);", 
+                        params![block.chain_id, block.id, block.timestamp, block.data, block.previous_hash, block.hash, block.provider_key, block.data_hash])?;
+    Ok(())
+}
+
+pub fn update_block(block: &Block) -> Result<()> {
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("UPDATE blocks SET (data) = ? WHERE chain_id = ? and id = ?", 
+                        params![block.data, block.chain_id, block.id])?;
+    Ok(())
+}
+
+pub fn insert_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute(
+        "INSERT INTO shared_keys (chain_id, value, active) VALUES (?, ?, ?)",
+        params![chain_id, &shared_key, true],
+    )?;
+    Ok(())
+}
+
+pub fn insert_new_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
+    let conn = Connection::open(DB_STRING)?;
+    conn.execute("UPDATE shared_keys SET active = 0 WHERE chain_id = ?", params![chain_id])?;
+    conn.execute(
+        "INSERT INTO shared_keys (chain_id, value, active) VALUES (?, ?, ?)",
+        params![chain_id, &shared_key, true],
+    )?;
+    Ok(())
+}
+
+fn insert_key_pair(conn: &Connection, key_pair: KeyPair) -> Result<()>{
+    conn.execute(
+        "INSERT INTO user_key_pairs (public_key, private_key) VALUES (?, ?)",
+        params![&key_pair.public_key, &key_pair.private_key],
+    )?;
+    Ok(())
+}
+
+// ----- Data fetching ----- //
 
 pub fn fetch_chains() -> Result<Vec<Chain>, rusqlite::Error> {
     let conn = Connection::open(DB_STRING)?;
@@ -107,19 +158,6 @@ pub fn fetch_record(chain_id: String, block_id: i64) -> Result<(i64, String)> {
     Ok(record)
 }
 
-pub fn get_next_chain_id() -> Result<i64> {
-    let conn = Connection::open(DB_STRING)?;
-    let query = format!(
-        "SELECT COALESCE(MAX({}), -1) + 1 AS next_id FROM {}",
-        "id", "chains"
-    );
-
-    // Execute the query and retrieve the result
-    let next_id: i64 = conn.query_row(&query, [], |row| row.get(0))?;
-
-    Ok(next_id)
-}
-
 pub fn chain_exists(id: String) -> Result<bool>{
     let conn = Connection::open(DB_STRING)?;
     let query = "SELECT EXISTS(SELECT 1 FROM chains WHERE id = ?)";
@@ -136,27 +174,6 @@ pub fn is_chain_active(id: String) -> Result<bool> {
         Ok(value != 0)
     })?;
     Ok(result)
-}
-
-pub fn set_chain_active(chain_id: String, active: bool) -> Result<()>{
-    let conn = Connection::open(DB_STRING)?;
-    conn.execute("UPDATE chains SET active = ? WHERE id = ?;", params![if active {1} else {0}, chain_id.clone()])?;
-    Ok(())
-}
-
-pub fn insert_block(block: &Block) -> Result<()> {
-    let conn = Connection::open(DB_STRING)?;
-    conn.execute("INSERT INTO blocks (chain_id, id, timestamp, data, previous_hash, hash, provider_key, data_hash) 
-                        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);", 
-                        params![block.chain_id, block.id, block.timestamp, block.data, block.previous_hash, block.hash, block.provider_key, block.data_hash])?;
-    Ok(())
-}
-
-pub fn update_block(block: &Block) -> Result<()> {
-    let conn = Connection::open(DB_STRING)?;
-    conn.execute("UPDATE blocks SET (data) = ? WHERE chain_id = ? and id = ?", 
-                        params![block.data, block.chain_id, block.id])?;
-    Ok(())
 }
 
 pub fn fetch_last_block(chain_id: String) -> Result<Block> {
@@ -185,25 +202,6 @@ pub fn fetch_last_block(chain_id: String) -> Result<Block> {
     }
 }
 
-pub fn insert_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
-    let conn = Connection::open(DB_STRING)?;
-    conn.execute(
-        "INSERT INTO shared_keys (chain_id, value, active) VALUES (?, ?, ?)",
-        params![chain_id, &shared_key, true],
-    )?;
-    Ok(())
-}
-
-pub fn insert_new_shared_key(shared_key: &[u8], chain_id: String) -> Result<()> {
-    let conn = Connection::open(DB_STRING)?;
-    conn.execute("UPDATE shared_keys SET active = 0 WHERE chain_id = ?", params![chain_id])?;
-    conn.execute(
-        "INSERT INTO shared_keys (chain_id, value, active) VALUES (?, ?, ?)",
-        params![chain_id, &shared_key, true],
-    )?;
-    Ok(())
-}
-
 pub fn get_shared_key(id: String) -> Result<Vec<u8>> {
     let conn = Connection::open(DB_STRING)?;
 
@@ -216,23 +214,6 @@ pub fn get_shared_key(id: String) -> Result<Vec<u8>> {
     } else {
         Err(rusqlite::Error::QueryReturnedNoRows)
     }
-}
-
-pub fn bootstrap() -> Result<()> {
-    let conn = Connection::open(DB_STRING)?;
-    // Create tables if they don't exist
-    create_tables(&conn)?;
-
-    // Check if public/private key pair exist
-    let key_pair_res = get_key_pair();
-
-    // If key_pair doesn't exist, generate one and save
-    if key_pair_res.is_ok() && key_pair_res.unwrap().is_none() {
-        let new_key_pair = generate_key_pair();
-        
-        let _ = insert_key_pair(&conn, new_key_pair);
-    }
-    Ok(())
 }
 
 pub fn get_key_pair() -> Result<Option<KeyPair>>{
@@ -259,30 +240,22 @@ pub fn get_key_pair() -> Result<Option<KeyPair>>{
     }
 }
 
-fn generate_key_pair() -> KeyPair {
-    // Generate RSA key pair
-    let rsa = Rsa::generate(2048).unwrap();
+// ------- Bootstrap Tables -------- //
 
-    // Extract public key as PEM string
-    let public_key_pem = rsa.public_key_to_pem().unwrap();
+pub fn bootstrap() -> Result<()> {
+    let conn = Connection::open(DB_STRING)?;
+    // Create tables if they don't exist
+    create_tables(&conn)?;
 
-    // Extract private key as PKCS#8 PEM string
-    let private_key_der = {
-        let pkey = PKey::from_rsa(rsa).unwrap();
-        pkey.private_key_to_pkcs8().unwrap()
-    };
+    // Check if public/private key pair exist
+    let key_pair_res = get_key_pair();
 
-    KeyPair {
-        public_key: String::from_utf8(public_key_pem).unwrap(),
-        private_key: private_key_der,
+    // If key_pair doesn't exist, generate one and save
+    if key_pair_res.is_ok() && key_pair_res.unwrap().is_none() {
+        let new_key_pair = generate_key_pair();
+        
+        let _ = insert_key_pair(&conn, new_key_pair);
     }
-}
-
-fn insert_key_pair(conn: &Connection, key_pair: KeyPair) -> Result<()>{
-    conn.execute(
-        "INSERT INTO user_key_pairs (public_key, private_key) VALUES (?, ?)",
-        params![&key_pair.public_key, &key_pair.private_key],
-    )?;
     Ok(())
 }
 

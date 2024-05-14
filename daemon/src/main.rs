@@ -14,16 +14,17 @@ async fn main() {
     let (blockchain_tx, blockchain_rx) = channel(10);
     let (p2p_tx, p2p_rx) = channel(10);
 
-    // Spawn blockchain task
+    // Spawn blockchain thread
     let blockchain_thread = tokio::spawn(async move {
         initialize_blockchain_thread(blockchain_rx, socket_tx, p2p_tx).await;
     });
 
-    // Spawn socket task
+    // Spawn socket thread
     let socket_thread = tokio::spawn(async move {
         initialize_socket_thread(socket_rx, blockchain_tx).await;
     });
 
+    // Spawn network thread
     let p2p_thread = tokio::spawn(async move {
         initialize_p2p_thread(p2p_rx).await;
     });
