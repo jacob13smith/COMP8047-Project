@@ -1,0 +1,10 @@
+#!/bin/bash
+
+./daemon & 
+daemon_pid=$!
+
+./bundle/client & 
+client_pid=$!
+
+wait $client_pid
+kill $daemon_pid

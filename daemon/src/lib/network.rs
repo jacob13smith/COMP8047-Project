@@ -106,7 +106,15 @@ async fn handle_request_from_network(){
         .with_no_client_auth()
         .with_cert_resolver(Arc::new(AllowAnyCertVerifier));
 
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", DEFAULT_PORT)).unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", DEFAULT_PORT));
+
+    let listener = match listener {
+        Ok(listener) => listener,
+        Err(_) => {
+            println!("Program already running. Shutting down.");
+            std::process::exit(0);
+        },
+    };
 
     loop {
         let (stream, _) = listener.accept().unwrap();
