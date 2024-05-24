@@ -1,4 +1,5 @@
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{fs, path::PathBuf};
+use dirs::home_dir;
 
 use serde_json::{from_str, to_string, Map, Value};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{UnixListener, UnixStream}};
@@ -6,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
 use crate::blockchain::{BlockchainRequest, BlockchainResponse};
 
-const UNIX_SOCKET_DOMAIN_DIR: &str = "/dev/shm/ehr/";
-const UNIX_SOCKET_DOMAIN: &str = "/dev/shm/ehr/ehr.sock";
+const UNIX_SOCKET_DOMAIN_DIR: &str = ".ehr/";
+const UNIX_SOCKET_DOMAIN: &str = "ehr.sock";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SocketRequest {
@@ -25,13 +26,16 @@ pub struct SocketResponse {
 pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>){
     let _ = std::fs::remove_file(UNIX_SOCKET_DOMAIN);
 
-    let path = Path::new(UNIX_SOCKET_DOMAIN_DIR);
-    if !path.exists() {
-        fs::create_dir_all(path).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o777)).unwrap();
-    }
+    let home = home_dir().unwrap();
 
-    let listener = UnixListener::bind(UNIX_SOCKET_DOMAIN).unwrap();
+    let mut sock_dir = PathBuf::from(home.clone());
+    sock_dir.push(UNIX_SOCKET_DOMAIN_DIR);
+    if !sock_dir.exists() {
+        fs::create_dir_all(sock_dir.clone()).unwrap();
+    }
+    sock_dir.push(UNIX_SOCKET_DOMAIN);
+
+    let listener = UnixListener::bind(sock_dir).unwrap();
 
     let stream = match listener.accept().await {
         Ok((stream, _)) => {
