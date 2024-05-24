@@ -35,7 +35,7 @@ class _PatientSelectionPage extends State<PatientSelectionPage> {
   }
 
   Future<void> connect() async {
-    socketApi = SocketApi('/tmp/ehr.sock');
+    socketApi = SocketApi('/dev/shm/ehr/ehr.sock');
     try {
       await socketApi.connect();
     } catch (e) {}

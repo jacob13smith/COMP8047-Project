@@ -1,10 +1,13 @@
+use std::{fs, path::Path};
+
 use serde_json::{from_str, to_string, Map, Value};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{UnixListener, UnixStream}};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{Receiver, Sender};
 use crate::blockchain::{BlockchainRequest, BlockchainResponse};
 
-const UNIX_SOCKET_DOMAIN: &str = "/tmp/ehr.sock";
+const UNIX_SOCKET_DOMAIN_DIR: &str = "/dev/shm/ehr/";
+const UNIX_SOCKET_DOMAIN: &str = "/dev/shm/ehr/ehr.sock";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SocketRequest {
@@ -20,8 +23,13 @@ pub struct SocketResponse {
 }
 
 pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>){
-    // Temp POC code for connection with frontend
     let _ = std::fs::remove_file(UNIX_SOCKET_DOMAIN);
+
+    let path = Path::new(UNIX_SOCKET_DOMAIN_DIR);
+    if !path.exists() {
+        fs::create_dir_all(path).unwrap();
+    }
+
     let listener = UnixListener::bind(UNIX_SOCKET_DOMAIN).unwrap();
 
     let stream = match listener.accept().await {
