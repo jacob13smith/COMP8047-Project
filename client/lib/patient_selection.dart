@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:client/patient_page.dart';
 import 'package:client/socket_api.dart';
@@ -35,7 +36,10 @@ class _PatientSelectionPage extends State<PatientSelectionPage> {
   }
 
   Future<void> connect() async {
-    socketApi = SocketApi('/dev/shm/ehr/ehr.sock');
+    String? userHome =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
+    print('$userHome/.ehr/ehr.sock');
+    socketApi = SocketApi('$userHome/.ehr/ehr.sock');
     try {
       await socketApi.connect();
     } catch (e) {}

@@ -24,16 +24,16 @@ pub struct SocketResponse {
 }
 
 pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>, sender_to_blockchain: Sender<String>){
-    let _ = std::fs::remove_file(UNIX_SOCKET_DOMAIN);
-
+    
     let home = home_dir().unwrap();
-
+    
     let mut sock_dir = PathBuf::from(home.clone());
     sock_dir.push(UNIX_SOCKET_DOMAIN_DIR);
     if !sock_dir.exists() {
         fs::create_dir_all(sock_dir.clone()).unwrap();
     }
     sock_dir.push(UNIX_SOCKET_DOMAIN);
+    let _ = std::fs::remove_file(sock_dir.clone());
 
     let listener = UnixListener::bind(sock_dir).unwrap();
 
