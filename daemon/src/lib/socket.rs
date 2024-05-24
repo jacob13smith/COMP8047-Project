@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 
 use serde_json::{from_str, to_string, Map, Value};
 use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::{UnixListener, UnixStream}};
@@ -28,6 +28,7 @@ pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>
     let path = Path::new(UNIX_SOCKET_DOMAIN_DIR);
     if !path.exists() {
         fs::create_dir_all(path).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o777)).unwrap();
     }
 
     let listener = UnixListener::bind(UNIX_SOCKET_DOMAIN).unwrap();
