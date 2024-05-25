@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
 use dirs::home_dir;
 
 use serde_json::{from_str, to_string, Map, Value};
@@ -35,7 +35,8 @@ pub async fn initialize_socket_thread(receiver_from_blockchain: Receiver<String>
     sock_dir.push(UNIX_SOCKET_DOMAIN);
     let _ = std::fs::remove_file(sock_dir.clone());
 
-    let listener = UnixListener::bind(sock_dir).unwrap();
+    let listener = UnixListener::bind(sock_dir.clone()).unwrap();
+    fs::set_permissions(sock_dir, fs::Permissions::from_mode(0o777)).unwrap();
 
     let stream = match listener.accept().await {
         Ok((stream, _)) => {
