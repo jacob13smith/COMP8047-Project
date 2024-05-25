@@ -38,11 +38,12 @@ class _PatientSelectionPage extends State<PatientSelectionPage> {
   Future<void> connect() async {
     String? userHome =
         Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
-    print('$userHome/.ehr/ehr.sock');
     socketApi = SocketApi('$userHome/.ehr/ehr.sock');
     try {
       await socketApi.connect();
-    } catch (e) {}
+    } catch (e) {
+      print(e);
+    }
   }
 
   void requestChains() async {
